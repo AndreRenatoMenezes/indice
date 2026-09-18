@@ -1,0 +1,107 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Financeiro.dc.html": {
+      "h": 844,
+      "title": "Financeiro",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "Habitos.dc.html": {
+      "h": 844,
+      "title": "Hábitos",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "Lancar.dc.html": {
+      "h": 844,
+      "title": "Lançamento rápido",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "Main.dc.html": {
+      "h": 844,
+      "title": "Hoje",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "Metas.dc.html": {
+      "h": 844,
+      "title": "Metas",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "Midia.dc.html": {
+      "h": 844,
+      "title": "Mídia",
+      "w": 390,
+      "x": 2350,
+      "y": 0
+    },
+    "Web.dc.html": {
+      "h": 900,
+      "title": "Web · Hoje (1280)",
+      "w": 1280,
+      "x": 0,
+      "y": 1244
+    },
+    "Widget.dc.html": {
+      "h": 200,
+      "title": "Widget Android (Glance)",
+      "w": 340,
+      "x": 2820,
+      "y": 0
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-09-18T20:18:05.813Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "s-sistema": {
+      "color": "green",
+      "text": "Estilo desenhado (Excalidraw)\nTraços gerados com rough.js (MIT), o mesmo motor do Excalidraw, com seed por elemento.\nFonte: Excalifont (MIT, repositório excalidraw), Kalam como reserva.\nItens de bibliotecas MIT do excalidraw-libraries: checkbox do Universal UI Kit (Manuel Ernesto Garcia) e check/seta do Basic UX Wireframing (Gabriela Macakova).\nPaleta open-color do Excalidraw: verde #b2f2bb/#2f9e44 · amarelo #ffec99 · azul #a5d8ff · tinta #1e1e1e.\nSignificadores do Bullet Journal como tipografia: • tarefa · × feita · ○ evento · – nota · * prioridade.\nDados: seed + teste da API de 18/09/2026. Alvo da meta (R$ 120.000), marcos e itens entre [colchetes] são ilustrativos.",
+      "w": 460,
+      "x": 1360,
+      "y": 1244
+    },
+    "t-android": {
+      "kind": "title1",
+      "maxW": 3160,
+      "text": "Índice · Android — telas 390×844 e widget de hábitos",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "t-web": {
+      "kind": "title1",
+      "maxW": 1280,
+      "text": "Índice · Web — visão diária em 1280",
+      "w": 240,
+      "x": 0,
+      "y": 984
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Habitos.dc.html",
+    "Financeiro.dc.html",
+    "Lancar.dc.html",
+    "Metas.dc.html",
+    "Midia.dc.html",
+    "Widget.dc.html",
+    "Web.dc.html"
+  ],
+  "pages": [],
+  "title": "Índice — Telas do App"
+}

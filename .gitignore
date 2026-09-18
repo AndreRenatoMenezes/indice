@@ -23,3 +23,8 @@ apps/android/*.iml
 apps/android/captures/
 *.tsbuildinfo
 apps/web/next-env.d.ts
+
+# Design tooling
+design/node_modules/
+design/excalidraw-libraries/
+design/test*.svg*
