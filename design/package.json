@@ -1,0 +1,13 @@
+{
+  "name": "indice-design",
+  "private": true,
+  "description": "Gerador das telas do Índice em estilo Excalidraw (rough.js + Excalifont + bibliotecas MIT do excalidraw-libraries).",
+  "scripts": {
+    "libs": "git clone --depth 1 https://github.com/excalidraw/excalidraw-libraries.git",
+    "gen": "node gen.cjs"
+  },
+  "dependencies": {
+    "perfect-freehand": "^1.2.2",
+    "roughjs": "^4.6.6"
+  }
+}

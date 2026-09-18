@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"],
+    "rootDir": "../..",
+    "allowImportingTsExtensions": false
+  },
+  "include": ["src", "../../packages/db/src", "../../packages/shared/src"]
+}

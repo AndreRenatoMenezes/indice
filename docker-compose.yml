@@ -1,0 +1,53 @@
+# Desenvolvimento local: Postgres + API + Web.
+#   docker compose up -d postgres         # só o banco (dev com npm run dev)
+#   docker compose up --build             # tudo em containers
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: indice
+      POSTGRES_PASSWORD: indice
+      POSTGRES_DB: indice
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U indice -d indice"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://indice:indice@postgres:5432/indice?schema=public
+      NODE_ENV: development
+      INDICE_API_KEY: dev-local-key
+      INDICE_USER_EMAIL: ${INDICE_USER_EMAIL:-andre@indice.local}
+      CORS_ORIGIN: http://localhost:3000
+      PORT: "8080"
+    command: sh -c "npx prisma migrate deploy --schema packages/db/prisma/schema.prisma && node apps/api/dist/apps/api/src/server.js"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      API_URL: http://api:8080
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+      INDICE_API_KEY_WEB: dev-local-key
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:

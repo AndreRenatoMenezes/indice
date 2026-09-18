@@ -1,0 +1,13 @@
+# Índice — guia para agentes
+
+Monorepo npm workspaces + Turborepo. Node 24. Sem pnpm.
+
+- **API** (`apps/api`): Fastify 5, TypeScript ESM (`NodeNext`, imports com `.js`), Prisma 6, zod 4. Regras de negócio são módulos puros em `src/modules/**` com testes vitest ao lado. Rotas em `src/routes/**`, uma por módulo de negócio. Auth: `X-Api-Key` resolve `req.userId`; toda query filtra por ele.
+- **Web** (`apps/web`): Next.js 15 App Router, Server Components + Server Actions. O browser nunca chama a API; `lib/api.ts` roda no servidor com a chave em env.
+- **Android** (`apps/android`): Kotlin, Compose, Retrofit + kotlinx.serialization. DTOs em `data/api/Dto.kt` espelham `packages/shared`.
+- **DB** (`packages/db`): schema Prisma. Meses 1..12. Dinheiro `Decimal(14,2)`. Soft delete por `deletedAt`. Saldos nunca gravados, sempre derivados.
+- **Contratos** (`packages/shared`): zod. Mudou um DTO? Atualize também o `Dto.kt`.
+
+Comandos: `npm run dev | test | typecheck | build`, `npm run db:migrate -- --name x`, `npm run db:seed`.
+
+Decisões e mapeamento do legado em `docs/analise-legado.md`. Não reintroduzir Supabase nem Telegram.

@@ -1,0 +1,912 @@
+// Índice — schema do banco (PostgreSQL / Cloud SQL) via Prisma.
+//
+// Princípios:
+//  - UUIDs gerados no cliente: Android e widgets criam registros offline sem
+//    esperar o servidor; o id nasce no dispositivo.
+//  - `updatedAt` + `deletedAt` (soft delete) em toda tabela de dados do usuário:
+//    base para sync incremental (pull "tudo que mudou desde X") sem lápides
+//    separadas, herdando a lição do sync_doc do WeekToDo Journal.
+//  - Dinheiro sempre Decimal(14,2). Mês sempre 1..12 (legado usava 0..11).
+//  - Datas de calendário são `@db.Date` (sem fuso); instantes são timestamptz.
+//
+// Módulos: Core · Journal (bullets) · Hábitos · Financeiro · Metas · Mídia.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// CORE
+// ───────────────────────────────────────────────────────────────────────────
+
+model User {
+  id          String   @id @default(uuid())
+  email       String   @unique
+  displayName String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  settings UserSettings?
+  apiKeys  ApiKey[]
+
+  collections         Collection[]
+  entries             Entry[]
+  recurrenceRules     RecurrenceRule[]
+  dailyLogs           DailyLog[]
+  habits              Habit[]
+  habitLogs           HabitLog[]
+  institutions        Institution[]
+  accounts            Account[]
+  creditCards         CreditCard[]
+  categories          Category[]
+  transactions        Transaction[]
+  cardInvoices        CardInvoice[]
+  bills               Bill[]
+  subscriptions       Subscription[]
+  budgets             Budget[]
+  monthlyTargets      MonthlyTarget[]
+  investmentPlans     InvestmentPlan[]
+  categorizationRules CategorizationRule[]
+  importBatches       ImportBatch[]
+  goals               Goal[]
+  mediaItems          MediaItem[]
+}
+
+// Preferências e parâmetros de negócio de um usuário só. Absorve o
+// `salary_config` e o `user_options` do app-financeiro e o `config` do WeekToDo.
+model UserSettings {
+  userId       String   @id
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timezone     String   @default("America/Sao_Paulo")
+  currency     String   @default("BRL")
+  weekStartsOn Int      @default(1) // 1 = segunda
+  salaryAmount Decimal? @db.Decimal(14, 2)
+  salaryDay    Int? // dia do mês do recebimento (1..31)
+  salaryLabel  String   @default("Salário")
+  dayStartsAt  String   @default("05:30") // hora-alvo de acordar (rotina fixa)
+  extra        Json     @default("{}") // preferências de UI (tema, densidade, colunas)
+  updatedAt    DateTime @updatedAt
+}
+
+// Chaves para clientes não interativos: widget Android, Colab, scripts.
+model ApiKey {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  keyHash    String    @unique
+  scopes     String[]  @default(["read", "write"])
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+}
+
+// Origem de um registro rápido: alimenta métricas de "de onde eu registro".
+enum Source {
+  WEB
+  ANDROID
+  WIDGET
+  API
+  IMPORT
+  SYSTEM
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// JOURNAL — os "bullets" (migração do WeekToDo Journal)
+// ───────────────────────────────────────────────────────────────────────────
+
+// Uma Collection é o container do Bullet Journal: o log diário (uma por data),
+// listas personalizadas (antigas customTodoLists), o log mensal e o future log.
+enum CollectionKind {
+  DAILY
+  MONTHLY
+  FUTURE
+  CUSTOM
+}
+
+model Collection {
+  id        String         @id @default(uuid())
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      CollectionKind
+  name      String
+  date      DateTime?      @db.Date // DAILY: a data; MONTHLY: 1º dia do mês
+  color     String?
+  sortOrder Int            @default(0)
+  archived  Boolean        @default(false)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  deletedAt DateTime?
+
+  entries Entry[]
+
+  @@unique([userId, kind, date]) // uma coleção DAILY/MONTHLY por data
+  @@index([userId, kind, archived])
+}
+
+// Tipos de bullet: tarefa (•), evento (○), nota (–).
+enum EntryKind {
+  TASK
+  EVENT
+  NOTE
+}
+
+// Estado do bullet, com os signifiers do método (migrado > , agendado < , irrelevante).
+enum EntryStatus {
+  OPEN
+  DONE
+  MIGRATED
+  SCHEDULED
+  CANCELLED
+}
+
+// Tabela unificada de bullets. Subtarefas são Entry com `parentId`.
+// Tarefas do WeekToDo mapeiam 1:1: text, desc, checked→status, color, priority,
+// tags, time, alarm, subTaskList→filhos, repeatingEvent→recurrenceRuleId.
+model Entry {
+  id           String     @id @default(uuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  collectionId String
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  parentId     String?
+  parent       Entry?     @relation("EntryChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children     Entry[]    @relation("EntryChildren")
+
+  kind        EntryKind   @default(TASK)
+  status      EntryStatus @default(OPEN)
+  text        String
+  description String? // markdown
+  date        DateTime?   @db.Date // data efetiva (denormalizada da coleção DAILY para consultas)
+  time        String? // "HH:mm"
+  alarm       Boolean     @default(false)
+  priority    Int         @default(0) // 0 nenhuma · 1 baixa · 2 média · 3 alta (signifier *)
+  color       String?
+  tags        String[]    @default([])
+  position    Int         @default(0)
+  completedAt DateTime?
+
+  // Rastro de migração de bullet (• → >): de onde veio e para onde foi.
+  migratedFromId String? @unique
+  migratedFrom   Entry?  @relation("EntryMigration", fields: [migratedFromId], references: [id], onDelete: SetNull)
+  migratedTo     Entry?  @relation("EntryMigration")
+
+  recurrenceRuleId   String?
+  recurrenceRule     RecurrenceRule?     @relation(fields: [recurrenceRuleId], references: [id], onDelete: SetNull)
+  recurrenceInstance RecurrenceInstance?
+
+  // Ligações opcionais com outros módulos: uma tarefa pode servir a uma meta
+  // ou a um item de mídia ("ler cap. 4").
+  goalId      String?
+  goal        Goal?      @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  mediaItemId String?
+  mediaItem   MediaItem? @relation(fields: [mediaItemId], references: [id], onDelete: SetNull)
+
+  source    Source    @default(WEB)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([userId, date, status])
+  @@index([collectionId, position])
+  @@index([userId, updatedAt])
+}
+
+// Regra RRULE + molde da tarefa (antigo repeating_events).
+model RecurrenceRule {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rrule     String // string RRULE (RFC 5545)
+  startDate DateTime  @db.Date
+  endDate   DateTime? @db.Date
+  template  Json // molde do bullet a materializar (text, description, time, alarm, color, priority, tags)
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  entries   Entry[]
+  instances RecurrenceInstance[]
+}
+
+// Antigo repeating_events_by_date: garante que uma regra materialize uma
+// única vez por data, mesmo com dois dispositivos abrindo o mesmo dia.
+model RecurrenceInstance {
+  ruleId  String
+  rule    RecurrenceRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  date    DateTime       @db.Date
+  entryId String         @unique
+  entry   Entry          @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@id([ruleId, date])
+}
+
+// Reflexão do dia (o "journal" do fork): humor, energia, texto livre.
+model DailyLog {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date       DateTime  @db.Date
+  wokeAt     String? // "HH:mm" real — compara com settings.dayStartsAt
+  mood       Int? // 1..5
+  energy     Int? // 1..5
+  sleepHours Decimal?  @db.Decimal(4, 2)
+  highlights String? // markdown curto
+  reflection String? // markdown longo
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+
+  @@unique([userId, date])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// HÁBITOS — marcação rápida via mobile/widget
+// ───────────────────────────────────────────────────────────────────────────
+
+enum HabitKind {
+  BOOLEAN // feito / não feito
+  COUNTER // n vezes (copos d'água)
+  DURATION // minutos (estudo)
+  TIME // registrar um horário (acordei às 05:24)
+}
+
+model Habit {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  icon        String?
+  color       String?
+  kind        HabitKind @default(BOOLEAN)
+  unit        String? // "min", "copos", "km"
+  targetValue Decimal?  @db.Decimal(10, 2) // meta diária (COUNTER/DURATION)
+  targetTime  String? // "HH:mm" (TIME: horário-limite, ex. acordar até 05:30)
+  weekdays    Int[]     @default([1, 2, 3, 4, 5, 6, 7]) // dias em que o hábito conta (1=seg…7=dom)
+  reminderAt  String? // "HH:mm"
+  sortOrder   Int       @default(0)
+  startDate   DateTime  @db.Date
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  logs  HabitLog[]
+  goals Goal[] // metas que dependem deste hábito (streak)
+
+  @@index([userId, archivedAt, sortOrder])
+}
+
+// Uma linha por hábito por dia. `value` é polimórfico conforme HabitKind:
+// BOOLEAN → 1/0 · COUNTER → contagem · DURATION → minutos · TIME → minutos desde 00:00.
+model HabitLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  habitId   String
+  habit     Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  date      DateTime @db.Date
+  value     Decimal  @db.Decimal(10, 2)
+  done      Boolean // já resolvido contra a meta (widget lê sem calcular)
+  note      String?
+  source    Source   @default(WIDGET)
+  loggedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([habitId, date])
+  @@index([userId, date])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// FINANCEIRO — migração do app-financeiro
+// ───────────────────────────────────────────────────────────────────────────
+
+enum InstitutionType {
+  BANK
+  FINTECH
+  COOPERATIVE
+  BROKER
+  OTHER
+}
+
+// Antiga `banks`. O ciclo de fatura (fechamento/vencimento) mora aqui, por
+// instituição, preservando a regra da feature 020: uma fatura por banco/mês.
+model Institution {
+  id               String          @id @default(uuid())
+  userId           String
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name             String
+  type             InstitutionType @default(BANK)
+  color            String?
+  closingDay       Int? // 1..31 — null = sem cartão
+  dueDay           Int? // 1..31 — obrigatório junto com closingDay
+  paymentAccountId String?
+  paymentAccount   Account?        @relation("InstitutionPaymentAccount", fields: [paymentAccountId], references: [id], onDelete: SetNull)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  deletedAt        DateTime?
+
+  accounts    Account[]
+  creditCards CreditCard[]
+  invoices    CardInvoice[]
+
+  @@unique([userId, name])
+}
+
+enum AccountKind {
+  CHECKING
+  SAVINGS
+  PAYMENT
+  CASH
+  INVESTMENT
+}
+
+// Antiga `accounts` (feature 031). Saldo é derivado, nunca gravado:
+//   saldo(D) = openingBalance + Σ entradas − Σ saídas − Σ aportes
+//              + Σ transferências recebidas − Σ enviadas, com openingDate ≤ date ≤ D.
+// Compra em fatura (invoiceId ≠ null) não movimenta conta.
+model Account {
+  id             String       @id @default(uuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  institutionId  String?
+  institution    Institution? @relation(fields: [institutionId], references: [id], onDelete: SetNull)
+  name           String
+  kind           AccountKind  @default(CHECKING)
+  openingBalance Decimal      @default(0) @db.Decimal(14, 2)
+  openingDate    DateTime     @db.Date
+  color          String?
+  isDefault      Boolean      @default(false)
+  archivedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+
+  transactions        Transaction[]        @relation("TransactionAccount")
+  incomingTransfers   Transaction[]        @relation("TransactionToAccount")
+  paymentFor          Institution[]        @relation("InstitutionPaymentAccount")
+  categorizationRules CategorizationRule[]
+  goals               Goal[]
+
+  @@unique([userId, name])
+}
+
+enum CardBrand {
+  VISA
+  MASTERCARD
+  ELO
+  AMEX
+  HIPERCARD
+  OTHER
+}
+
+model CreditCard {
+  id            String      @id @default(uuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  institutionId String
+  institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Restrict)
+  nickname      String
+  brand         CardBrand   @default(OTHER)
+  last4         String
+  limitAmount   Decimal?    @db.Decimal(14, 2)
+  archivedAt    DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  deletedAt     DateTime?
+
+  transactions  Transaction[]
+  subscriptions Subscription[]
+}
+
+enum CategoryKind {
+  EXPENSE
+  INCOME
+  INVESTMENT
+}
+
+// Substitui os arrays `categories`, `origins` e `invest_types` do user_options
+// por uma tabela só, discriminada por `kind`. "Encargos do Cartão" é `system`.
+model Category {
+  id         String       @id @default(uuid())
+  userId     String
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind       CategoryKind
+  name       String
+  color      String?
+  icon       String?
+  sortOrder  Int          @default(0)
+  system     Boolean      @default(false)
+  archivedAt DateTime?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  transactions        Transaction[]
+  bills               Bill[]
+  subscriptions       Subscription[]
+  budgets             Budget[]
+  categorizationRules CategorizationRule[]
+  goals               Goal[]
+
+  @@unique([userId, kind, name])
+}
+
+enum TransactionType {
+  EXPENSE
+  INCOME
+  INVESTMENT
+  TRANSFER
+}
+
+enum PaymentMethod {
+  DEBIT
+  PIX
+  CREDIT
+  CASH
+  BOLETO
+  OTHER
+}
+
+enum InvoiceStatus {
+  OPEN
+  CLOSED
+  PAID
+}
+
+// Tabela unificada: expenses + income + investments + transfers do legado.
+// Regras herdadas (validadas na API):
+//  - CREDIT exige creditCardId; invoiceId só com CREDIT.
+//  - TRANSFER exige accountId (origem) e toAccountId (destino) distintos.
+//  - paidInvoiceId marca a saída que quitou uma fatura (D6): é ela que
+//    movimenta a conta, nunca as compras dentro da fatura.
+//  - importId único por usuário: "ofx:<FITID>" | "gen:<hash>" | "agg:<hash>" |
+//    "parc:<grupo>:<n>" — dedup determinística (features 011/032).
+model Transaction {
+  id            String          @id @default(uuid())
+  userId        String
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type          TransactionType
+  date          DateTime        @db.Date
+  amount        Decimal         @db.Decimal(14, 2) // sempre positivo; o sinal vem de `type`
+  description   String          @default("")
+  categoryId    String?
+  category      Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  paymentMethod PaymentMethod?
+  accountId     String?
+  account       Account?        @relation("TransactionAccount", fields: [accountId], references: [id], onDelete: Restrict)
+  toAccountId   String?
+  toAccount     Account?        @relation("TransactionToAccount", fields: [toAccountId], references: [id], onDelete: Restrict)
+  creditCardId  String?
+  creditCard    CreditCard?     @relation(fields: [creditCardId], references: [id], onDelete: SetNull)
+
+  invoiceId     String?
+  invoice       CardInvoice? @relation("InvoicePurchases", fields: [invoiceId], references: [id], onDelete: SetNull)
+  paidInvoiceId String?      @unique
+  paidInvoice   CardInvoice? @relation("InvoicePayment", fields: [paidInvoiceId], references: [id], onDelete: Cascade)
+
+  subscriptionId   String?
+  subscription     Subscription?   @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  billOccurrenceId String?         @unique
+  billOccurrence   BillOccurrence? @relation(fields: [billOccurrenceId], references: [id], onDelete: SetNull)
+
+  installmentGroupId String?
+  installmentNo      Int?
+  installmentTotal   Int?
+
+  importId      String?
+  importBatchId String?
+  importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+
+  goalContribution GoalContribution?
+
+  notes     String?
+  source    Source    @default(WEB)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([userId, importId])
+  @@index([userId, date])
+  @@index([userId, type, date])
+  @@index([accountId, date])
+  @@index([invoiceId])
+  @@index([installmentGroupId])
+  @@index([userId, updatedAt])
+}
+
+// Antiga `card_invoices`: uma por instituição por mês de referência (mês do
+// vencimento). `totalManual` congela o total quando editado à mão.
+model CardInvoice {
+  id            String        @id @default(uuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  institutionId String
+  institution   Institution   @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  refYear       Int
+  refMonth      Int // 1..12
+  closingDate   DateTime      @db.Date
+  dueDate       DateTime      @db.Date
+  total         Decimal       @default(0) @db.Decimal(14, 2)
+  totalManual   Boolean       @default(false)
+  declaredTotal Decimal?      @db.Decimal(14, 2) // total lido do arquivo importado
+  status        InvoiceStatus @default(OPEN) // PAID só via pagamento explícito; OPEN/CLOSED derivados de closingDate
+  importedAt    DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime?
+
+  purchases Transaction[] @relation("InvoicePurchases")
+  payment   Transaction?  @relation("InvoicePayment")
+
+  @@unique([institutionId, refYear, refMonth])
+  @@index([userId, dueDate])
+}
+
+enum BillValueType {
+  FIXED
+  VARIABLE
+}
+
+// Antiga `bills`: contas recorrentes do checklist mensal (luz, aluguel…).
+model Bill {
+  id               String        @id @default(uuid())
+  userId           String
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name             String
+  categoryId       String?
+  category         Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  valueType        BillValueType @default(VARIABLE)
+  fixedValue       Decimal?      @db.Decimal(14, 2)
+  avgValue         Decimal?      @db.Decimal(14, 2)
+  dueDay           Int? // 1..31
+  applicableMonths Int[]         @default([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
+  defaultPayment   PaymentMethod @default(DEBIT)
+  notes            String?
+  archivedAt       DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  deletedAt        DateTime?
+
+  occurrences BillOccurrence[]
+
+  @@unique([userId, name])
+}
+
+enum BillStatus {
+  PENDING
+  PAID
+  SKIPPED
+}
+
+// Antiga `bill_months`. Pagar cria a Transaction (EXPENSE) ligada por
+// `Transaction.billOccurrenceId` (feature 019: conta paga vira saída).
+model BillOccurrence {
+  id        String     @id @default(uuid())
+  billId    String
+  bill      Bill       @relation(fields: [billId], references: [id], onDelete: Cascade)
+  year      Int
+  month     Int // 1..12
+  amount    Decimal    @default(0) @db.Decimal(14, 2)
+  status    BillStatus @default(PENDING)
+  paidAt    DateTime?
+  updatedAt DateTime   @updatedAt
+
+  payment Transaction?
+
+  @@unique([billId, year, month])
+}
+
+enum SubscriptionCycle {
+  MONTHLY
+  YEARLY
+}
+
+model Subscription {
+  id            String            @id @default(uuid())
+  userId        String
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  cycle         SubscriptionCycle @default(MONTHLY)
+  amount        Decimal           @db.Decimal(14, 2)
+  categoryId    String?
+  category      Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  paymentMethod PaymentMethod     @default(CREDIT)
+  creditCardId  String?
+  creditCard    CreditCard?       @relation(fields: [creditCardId], references: [id], onDelete: SetNull)
+  billingDay    Int // 1..31 (clampado no mês curto)
+  startDate     DateTime          @db.Date
+  cancelledAt   DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  deletedAt     DateTime?
+
+  transactions Transaction[]
+
+  @@index([userId, cancelledAt])
+}
+
+// Teto por categoria por mês.
+model Budget {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  year       Int
+  month      Int // 1..12
+  amount     Decimal  @db.Decimal(14, 2)
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, categoryId, year, month])
+}
+
+// Antiga `goals` do financeiro: meta de poupança do mês. Renomeada para não
+// colidir com as Metas de longo prazo.
+model MonthlyTarget {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  year          Int
+  month         Int // 1..12
+  savingsTarget Decimal  @db.Decimal(14, 2)
+  updatedAt     DateTime @updatedAt
+
+  @@unique([userId, year, month])
+}
+
+// Plano de alocação do aporte do mês (percentuais por destino).
+model InvestmentPlan {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  year       Int
+  month      Int // 1..12
+  name       String
+  percentage Decimal  @db.Decimal(5, 2)
+  color      String?
+  sortOrder  Int      @default(0)
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, year, month, name])
+}
+
+// Memória de categorização (feature 013): correção do usuário vira regra
+// por descrição normalizada + tipo, com precedência sobre keyword e IA.
+model CategorizationRule {
+  id            String          @id @default(uuid())
+  userId        String
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pattern       String // descrição normalizada (minúscula, sem acento)
+  txType        TransactionType
+  categoryId    String?
+  category      Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  paymentMethod PaymentMethod?
+  accountId     String?
+  account       Account?        @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  hits          Int             @default(1)
+  updatedAt     DateTime        @updatedAt
+
+  @@unique([userId, pattern, txType])
+}
+
+enum ImportKind {
+  STATEMENT
+  INVOICE
+}
+
+// Auditoria de importação: cada arquivo processado vira um lote.
+model ImportBatch {
+  id         String     @id @default(uuid())
+  userId     String
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind       ImportKind
+  fileName   String
+  fileHash   String
+  summary    Json       @default("{}") // {created, duplicates, divergent, skipped}
+  importedAt DateTime   @default(now())
+
+  transactions Transaction[]
+
+  @@index([userId, importedAt])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// METAS DE LONGO PRAZO
+// ───────────────────────────────────────────────────────────────────────────
+
+enum GoalKind {
+  FINANCIAL // valor acumulado (ex.: entrada da casa)
+  NUMERIC // quantidade (ex.: 20 livros)
+  HABIT // consistência de um hábito (ex.: 90% dos dias)
+  MILESTONE // binário, com marcos intermediários
+}
+
+enum GoalStatus {
+  ACTIVE
+  PAUSED
+  ACHIEVED
+  ABANDONED
+}
+
+// Cada meta guarda o alvo; o progresso vem de GoalContribution (série temporal)
+// e de GoalSnapshot (fotos periódicas + projeção), pensados para exportar ao
+// Colab e modelar tempo/esforço restante.
+model Goal {
+  id          String     @id @default(uuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  kind        GoalKind   @default(FINANCIAL)
+  status      GoalStatus @default(ACTIVE)
+  targetValue Decimal    @db.Decimal(14, 2) // R$ para FINANCIAL, unidades para NUMERIC, % para HABIT
+  unit        String?
+  startDate   DateTime   @db.Date
+  targetDate  DateTime?  @db.Date // ex.: 2035-08-05
+  color       String?
+  icon        String?
+  priority    Int        @default(0)
+
+  // Fontes automáticas de progresso (opcionais):
+  linkedAccountId  String? // FINANCIAL: saldo desta conta conta como progresso
+  linkedAccount    Account?  @relation(fields: [linkedAccountId], references: [id], onDelete: SetNull)
+  linkedCategoryId String? // FINANCIAL: aportes nesta categoria contam
+  linkedCategory   Category? @relation(fields: [linkedCategoryId], references: [id], onDelete: SetNull)
+  linkedHabitId    String? // HABIT: hábito cuja consistência é medida
+  linkedHabit      Habit?    @relation(fields: [linkedHabitId], references: [id], onDelete: SetNull)
+
+  achievedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+
+  milestones    GoalMilestone[]
+  contributions GoalContribution[]
+  snapshots     GoalSnapshot[]
+  entries       Entry[]
+
+  @@index([userId, status, targetDate])
+}
+
+model GoalMilestone {
+  id          String    @id @default(uuid())
+  goalId      String
+  goal        Goal      @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  title       String
+  targetValue Decimal?  @db.Decimal(14, 2)
+  targetDate  DateTime? @db.Date
+  achievedAt  DateTime?
+  sortOrder   Int       @default(0)
+  updatedAt   DateTime  @updatedAt
+}
+
+// Série temporal de progresso. Um aporte financeiro pode apontar para a
+// Transaction (INVESTMENT) que o originou; contribuições manuais não apontam.
+model GoalContribution {
+  id            String       @id @default(uuid())
+  goalId        String
+  goal          Goal         @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  date          DateTime     @db.Date
+  amount        Decimal      @db.Decimal(14, 2)
+  note          String?
+  transactionId String?      @unique
+  transaction   Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  source        Source       @default(WEB)
+  createdAt     DateTime     @default(now())
+
+  @@index([goalId, date])
+}
+
+// Foto periódica (gerada por job ou sob demanda): progresso acumulado, ritmo
+// e data projetada. É o dataset pronto para modelagem preditiva.
+model GoalSnapshot {
+  id              String    @id @default(uuid())
+  goalId          String
+  goal            Goal      @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  date            DateTime  @db.Date
+  progressValue   Decimal   @db.Decimal(14, 2)
+  progressPct     Decimal   @db.Decimal(5, 2)
+  paceMonthly     Decimal?  @db.Decimal(14, 2) // média dos últimos 3 meses
+  projectedDate   DateTime? @db.Date
+  requiredMonthly Decimal?  @db.Decimal(14, 2) // para bater targetDate
+  createdAt       DateTime  @default(now())
+
+  @@unique([goalId, date])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// ARQUIVO DE MÍDIA
+// ───────────────────────────────────────────────────────────────────────────
+
+enum MediaKind {
+  BOOK
+  GAME
+  MOVIE
+  SERIES
+  COURSE
+  ARTICLE
+  PODCAST
+}
+
+enum MediaStatus {
+  WISHLIST
+  IN_PROGRESS
+  PAUSED
+  DONE
+  DROPPED
+}
+
+model MediaItem {
+  id            String      @id @default(uuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind          MediaKind
+  title         String
+  creator       String? // autor, estúdio, diretor
+  year          Int?
+  platform      String? // PS5, Kindle, Steam, físico…
+  externalId    String? // ISBN, IGDB id, IMDB id
+  coverUrl      String?
+  status        MediaStatus @default(WISHLIST)
+  rating        Int? // 1..10
+  progress      Decimal?    @db.Decimal(10, 2) // páginas, %, horas
+  progressTotal Decimal?    @db.Decimal(10, 2)
+  progressUnit  String? // "páginas", "%", "h"
+  tags          String[]    @default([])
+  startedAt     DateTime?   @db.Date
+  finishedAt    DateTime?   @db.Date
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  deletedAt     DateTime?
+
+  notes    MediaNote[]
+  sessions MediaSession[]
+  entries  Entry[]
+
+  @@index([userId, kind, status])
+}
+
+enum MediaNoteKind {
+  REVIEW
+  LEARNING
+  QUOTE
+  NOTE
+}
+
+model MediaNote {
+  id          String        @id @default(uuid())
+  mediaItemId String
+  mediaItem   MediaItem     @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  kind        MediaNoteKind @default(NOTE)
+  title       String?
+  body        String // markdown
+  position    String? // "cap. 4", "p. 112", "01:20:00"
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  deletedAt   DateTime?
+
+  @@index([mediaItemId, createdAt])
+}
+
+// Sessão de consumo (leitura/jogo/estudo): alimenta o resumo diário e pode
+// espelhar um HabitLog do tipo DURATION.
+model MediaSession {
+  id            String    @id @default(uuid())
+  mediaItemId   String
+  mediaItem     MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  date          DateTime  @db.Date
+  durationMin   Int?
+  progressDelta Decimal?  @db.Decimal(10, 2)
+  note          String?
+  source        Source    @default(ANDROID)
+  createdAt     DateTime  @default(now())
+
+  @@index([mediaItemId, date])
+}

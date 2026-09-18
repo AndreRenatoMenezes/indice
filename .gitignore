@@ -1,0 +1,30 @@
+node_modules/
+dist/
+.next/
+out/
+coverage/
+.turbo/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# Prisma
+packages/db/generated/
+
+# Android
+apps/android/.gradle/
+apps/android/build/
+apps/android/app/build/
+apps/android/local.properties
+apps/android/.idea/
+apps/android/*.iml
+apps/android/captures/
+*.tsbuildinfo
+apps/web/next-env.d.ts
+
+# Design tooling
+design/node_modules/
+design/excalidraw-libraries/
+design/test*.svg*
