@@ -1,0 +1,37 @@
+{
+  "name": "indice",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Índice — mapa central minimalista: rotina, finanças, hábitos, metas e mídia.",
+  "workspaces": [
+    "apps/api",
+    "apps/web",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "db:generate": "npm run generate -w @indice/db",
+    "db:migrate": "npm run migrate:dev -w @indice/db",
+    "db:deploy": "npm run migrate:deploy -w @indice/db",
+    "db:seed": "npm run seed -w @indice/db",
+    "db:studio": "npm run studio -w @indice/db"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0",
+    "typescript": "^5.9.0"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "npm@11.19.0",
+  "allowScripts": {
+    "@prisma/client@6.19.3": true,
+    "prisma@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "esbuild@0.28.2": true
+  }
+}

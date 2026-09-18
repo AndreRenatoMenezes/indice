@@ -1,0 +1,80 @@
+# Cloud Build: constrói e publica as duas imagens e faz deploy no Cloud Run.
+# Substituições esperadas: _REGION, _REPO (Artifact Registry), _SQL_INSTANCE
+# (projeto:região:instância), _DB_SECRET (nome do secret com DATABASE_URL),
+# _API_KEY_SECRET (secret com INDICE_API_KEY_WEB).
+steps:
+  - name: gcr.io/cloud-builders/docker
+    id: build-api
+    args: ["build", "-f", "apps/api/Dockerfile", "-t", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-api:$SHORT_SHA", "."]
+  - name: gcr.io/cloud-builders/docker
+    id: build-web
+    args: ["build", "-f", "apps/web/Dockerfile", "-t", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-web:$SHORT_SHA", "."]
+  - name: gcr.io/cloud-builders/docker
+    args: ["push", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-api:$SHORT_SHA"]
+  - name: gcr.io/cloud-builders/docker
+    args: ["push", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-web:$SHORT_SHA"]
+
+  # Migrações via Cloud Run Job efêmero (mesma imagem da API).
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: migrate
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        gcloud run jobs deploy indice-migrate \
+          --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-api:$SHORT_SHA \
+          --region ${_REGION} \
+          --set-cloudsql-instances ${_SQL_INSTANCE} \
+          --set-secrets DATABASE_URL=${_DB_SECRET}:latest \
+          --command npx --args "prisma,migrate,deploy,--schema,packages/db/prisma/schema.prisma" \
+          --quiet
+        gcloud run jobs execute indice-migrate --region ${_REGION} --wait
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: deploy-api
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - indice-api
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-api:$SHORT_SHA
+      - --region=${_REGION}
+      - --platform=managed
+      - --add-cloudsql-instances=${_SQL_INSTANCE}
+      - --set-secrets=DATABASE_URL=${_DB_SECRET}:latest
+      - --set-env-vars=NODE_ENV=production,TZ=America/Sao_Paulo,CORS_ORIGIN=${_WEB_ORIGIN}
+      - --min-instances=0
+      - --max-instances=2
+      - --cpu=1
+      - --memory=512Mi
+      - --allow-unauthenticated
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: deploy-web
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        API_URL=$(gcloud run services describe indice-api --region ${_REGION} --format 'value(status.url)')
+        gcloud run deploy indice-web \
+          --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-web:$SHORT_SHA \
+          --region ${_REGION} --platform managed \
+          --set-env-vars API_URL=$$API_URL,NEXT_PUBLIC_API_URL=$$API_URL,NODE_ENV=production \
+          --set-secrets INDICE_API_KEY_WEB=${_API_KEY_SECRET}:latest \
+          --min-instances 0 --max-instances 2 --cpu 1 --memory 512Mi \
+          --allow-unauthenticated
+
+substitutions:
+  _REGION: southamerica-east1
+  _REPO: indice
+  _SQL_INSTANCE: ""
+  _DB_SECRET: indice-database-url
+  _API_KEY_SECRET: indice-api-key
+  _WEB_ORIGIN: "*"
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-api:$SHORT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-web:$SHORT_SHA
+
+options:
+  logging: CLOUD_LOGGING_ONLY
