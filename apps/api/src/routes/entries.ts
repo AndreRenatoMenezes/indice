@@ -3,7 +3,8 @@ import { z } from "zod";
 import { prisma, type Entry, type Prisma } from "@indice/db";
 import { CreateEntryInput, UpdateEntryInput, type EntryDto } from "@indice/shared";
 import { parse, dateOrNull } from "../lib/http.js";
-import { fromISODate } from "../lib/dates.js";
+import { fromISODate, todayISO } from "../lib/dates.js";
+import { config } from "../config.js";
 import { sortEntries } from "../modules/journal/ordering.js";
 
 export function toEntryDto(e: Entry, children?: Entry[]): EntryDto {
@@ -65,7 +66,7 @@ export async function entriesRoutes(app: FastifyInstance) {
       collectionId = parent.collectionId;
       date = parent.date;
     } else if (!collectionId) {
-      const c = await ensureDailyCollection(req.userId, body.date ?? new Date().toISOString().slice(0, 10));
+      const c = await ensureDailyCollection(req.userId, body.date ?? todayISO(config.timezone));
       collectionId = c.id;
       date = c.date;
     } else {

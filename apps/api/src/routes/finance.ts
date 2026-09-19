@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma, type Prisma, type Transaction } from "@indice/db";
-import { CreateTransactionInput, type FinanceSummaryDto, type TransactionDto } from "@indice/shared";
+import { CreateTransactionInput, type AccountDto, type CategoryDto, type FinanceSummaryDto, type InstitutionDto, type InvoiceDto, type TransactionDto } from "@indice/shared";
 import { parse, dec, decOrNull, dateOrNull } from "../lib/http.js";
 import { addDays, daysBetween, fromISODate, monthRange, parts, todayISO } from "../lib/dates.js";
 import { config } from "../config.js";
@@ -9,11 +9,24 @@ import { calcBalance, calcDailyBudget, calcCurrentDailyRate, computeAccountBalan
 import { resolveCycle, effectiveInvoiceStatus } from "../modules/finance/invoice-cycle.js";
 import { calcTrafficLight, daysToNextSalary } from "../modules/finance/traffic-light.js";
 
-export function toTransactionDto(t: Transaction & { category?: { name: string } | null }): TransactionDto {
+// Relações carregadas junto com o lançamento para os rótulos da listagem.
+export const transactionInclude = {
+  category: { select: { name: true } },
+  account: { select: { name: true } },
+  toAccount: { select: { name: true } },
+  creditCard: { select: { nickname: true, last4: true } },
+  invoice: { select: { refMonth: true, refYear: true } },
+} satisfies Prisma.TransactionInclude;
+type TransactionRow = Transaction & Partial<Prisma.TransactionGetPayload<{ include: typeof transactionInclude }>>;
+
+export function toTransactionDto(t: TransactionRow): TransactionDto {
   return {
     id: t.id, type: t.type, date: dateOrNull(t.date)!, amount: dec(t.amount), description: t.description,
     categoryId: t.categoryId, categoryName: t.category?.name ?? null, paymentMethod: t.paymentMethod, accountId: t.accountId,
     toAccountId: t.toAccountId, creditCardId: t.creditCardId, invoiceId: t.invoiceId, installmentNo: t.installmentNo, installmentTotal: t.installmentTotal,
+    accountName: t.account?.name ?? null, toAccountName: t.toAccount?.name ?? null,
+    creditCardLabel: t.creditCard ? `${t.creditCard.nickname} ····${t.creditCard.last4}` : null,
+    invoiceRef: t.invoice ? `${String(t.invoice.refMonth).padStart(2, "0")}/${t.invoice.refYear}` : null,
   };
 }
 
@@ -90,7 +103,7 @@ export async function financeRoutes(app: FastifyInstance) {
     if (q.from || q.to) where.date = { ...(q.from ? { gte: fromISODate(q.from) } : {}), ...(q.to ? { lte: fromISODate(q.to) } : {}) };
     if (q.type) where.type = q.type as Transaction["type"];
     if (q.accountId) where.OR = [{ accountId: q.accountId }, { toAccountId: q.accountId }];
-    const rows = await prisma.transaction.findMany({ where, include: { category: true }, orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: q.limit });
+    const rows = await prisma.transaction.findMany({ where, include: transactionInclude, orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: q.limit });
     return { transactions: rows.map(toTransactionDto) };
   });
 
@@ -115,7 +128,7 @@ export async function financeRoutes(app: FastifyInstance) {
         categoryId: body.categoryId, paymentMethod: body.paymentMethod ?? (body.creditCardId ? "CREDIT" : undefined), accountId: body.accountId,
         toAccountId: body.toAccountId, creditCardId: body.creditCardId, invoiceId, notes: body.notes, source: body.source ?? "API",
       },
-      include: { category: true },
+      include: transactionInclude,
     });
     if (invoiceId) await recalcInvoiceTotal(invoiceId);
     return reply.code(201).send(toTransactionDto(created));
@@ -142,10 +155,8 @@ export async function financeRoutes(app: FastifyInstance) {
       txs.map((t) => ({ ...t, date: dateOrNull(t.date)! })),
       q.upTo ?? null,
     );
-    return {
-      accounts: accounts.map((a) => ({ id: a.id, name: a.name, kind: a.kind, institution: a.institution?.name ?? null, color: a.color, isDefault: a.isDefault, balance: Math.round((balances.get(a.id) ?? 0) * 100) / 100 })),
-      unassigned: balances.get(UNASSIGNED) ?? 0,
-    };
+    const list: AccountDto[] = accounts.map((a) => ({ id: a.id, name: a.name, kind: a.kind, institution: a.institution?.name ?? null, color: a.color, isDefault: a.isDefault, balance: Math.round((balances.get(a.id) ?? 0) * 100) / 100 }));
+    return { accounts: list, unassigned: balances.get(UNASSIGNED) ?? 0 };
   });
 
   app.post("/accounts", async (req, reply) => {
@@ -158,7 +169,8 @@ export async function financeRoutes(app: FastifyInstance) {
 
   app.get("/institutions", async (req) => {
     const rows = await prisma.institution.findMany({ where: { userId: req.userId, deletedAt: null }, include: { creditCards: { where: { deletedAt: null } } }, orderBy: { name: "asc" } });
-    return { institutions: rows.map((i) => ({ id: i.id, name: i.name, type: i.type, color: i.color, closingDay: i.closingDay, dueDay: i.dueDay, cards: i.creditCards.map((c) => ({ id: c.id, nickname: c.nickname, brand: c.brand, last4: c.last4 })) })) };
+    const list: InstitutionDto[] = rows.map((i) => ({ id: i.id, name: i.name, type: i.type, color: i.color, closingDay: i.closingDay, dueDay: i.dueDay, cards: i.creditCards.map((c) => ({ id: c.id, nickname: c.nickname, brand: c.brand, last4: c.last4 })) }));
+    return { institutions: list };
   });
 
   app.post("/institutions", async (req, reply) => {
@@ -181,7 +193,8 @@ export async function financeRoutes(app: FastifyInstance) {
 
   app.get("/categories", async (req) => {
     const rows = await prisma.category.findMany({ where: { userId: req.userId, archivedAt: null }, orderBy: [{ kind: "asc" }, { sortOrder: "asc" }] });
-    return { categories: rows.map((c) => ({ id: c.id, kind: c.kind, name: c.name, color: c.color, icon: c.icon, system: c.system })) };
+    const list: CategoryDto[] = rows.map((c) => ({ id: c.id, kind: c.kind, name: c.name, color: c.color, icon: c.icon, system: c.system }));
+    return { categories: list };
   });
 
   app.get("/invoices", async (req, reply) => {
@@ -189,7 +202,8 @@ export async function financeRoutes(app: FastifyInstance) {
     if (!q) return;
     const today = todayISO(config.timezone);
     const rows = await prisma.cardInvoice.findMany({ where: { userId: req.userId, deletedAt: null, ...(q.year ? { refYear: q.year } : {}), ...(q.month ? { refMonth: q.month } : {}) }, include: { institution: true, _count: { select: { purchases: true } } }, orderBy: { dueDate: "desc" }, take: 60 });
-    return { invoices: rows.map((i) => ({ id: i.id, institution: i.institution.name, refYear: i.refYear, refMonth: i.refMonth, closingDate: dateOrNull(i.closingDate), dueDate: dateOrNull(i.dueDate), total: dec(i.total), declaredTotal: decOrNull(i.declaredTotal), purchases: i._count.purchases, status: effectiveInvoiceStatus({ status: i.status, closingDate: dateOrNull(i.closingDate)! }, today) })) };
+    const list: InvoiceDto[] = rows.map((i) => ({ id: i.id, institution: i.institution.name, refYear: i.refYear, refMonth: i.refMonth, closingDate: dateOrNull(i.closingDate), dueDate: dateOrNull(i.dueDate), total: dec(i.total), declaredTotal: decOrNull(i.declaredTotal), purchases: i._count.purchases, status: effectiveInvoiceStatus({ status: i.status, closingDate: dateOrNull(i.closingDate)! }, today) }));
+    return { invoices: list };
   });
 
   // Pagar fatura (D6): cria a saída que movimenta a conta e congela a fatura como PAID.

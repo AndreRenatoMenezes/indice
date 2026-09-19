@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "@indice/db";
-import { type DailySummaryDto } from "@indice/shared";
+import { UpsertDailyLogInput, type DailySummaryDto } from "@indice/shared";
 import { parse, decOrNull } from "../lib/http.js";
 import { fromISODate, isoWeekday, todayISO } from "../lib/dates.js";
 import { config } from "../config.js";
@@ -47,7 +47,7 @@ export async function dailySummaryRoutes(app: FastifyInstance) {
 
   app.put("/daily-log/:date", async (req, reply) => {
     const { date } = req.params as { date: string };
-    const body = parse(z.object({ wokeAt: z.string().optional(), mood: z.number().int().min(1).max(5).optional(), energy: z.number().int().min(1).max(5).optional(), sleepHours: z.number().optional(), highlights: z.string().optional(), reflection: z.string().optional() }), req.body, reply);
+    const body = parse(UpsertDailyLogInput, req.body, reply);
     if (!body) return;
     const log = await prisma.dailyLog.upsert({ where: { userId_date: { userId: req.userId, date: fromISODate(date) } }, update: body, create: { ...body, userId: req.userId, date: fromISODate(date) } });
     return { date, wokeAt: log.wokeAt, mood: log.mood, energy: log.energy, sleepHours: decOrNull(log.sleepHours), highlights: log.highlights, reflection: log.reflection };

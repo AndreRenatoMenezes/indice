@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma, type Goal, type GoalContribution } from "@indice/db";
-import { ContributeGoalInput, CreateGoalInput, type GoalProgressDto } from "@indice/shared";
+import { ContributeGoalInput, CreateGoalInput, UpdateGoalInput, type GoalDetailDto, type GoalProgressDto } from "@indice/shared";
 import { parse, dec, dateOrNull } from "../lib/http.js";
 import { fromISODate, todayISO } from "../lib/dates.js";
 import { config } from "../config.js";
@@ -75,7 +75,33 @@ export async function goalsRoutes(app: FastifyInstance) {
     const g = await prisma.goal.findFirst({ where: { id, userId: req.userId, deletedAt: null }, include: { contributions: { orderBy: { date: "asc" } }, milestones: { orderBy: { sortOrder: "asc" } } } });
     if (!g) return reply.code(404).send({ error: "not found" });
     const progress = await goalProgress(g, req.userId, todayISO(config.timezone));
-    return { ...progress, description: g.description, unit: g.unit, milestones: g.milestones.map((m) => ({ id: m.id, title: m.title, targetValue: m.targetValue == null ? null : dec(m.targetValue), targetDate: dateOrNull(m.targetDate), achievedAt: m.achievedAt })), contributions: g.contributions.map((c) => ({ id: c.id, date: dateOrNull(c.date), amount: dec(c.amount), note: c.note, transactionId: c.transactionId })) };
+    const detail: GoalDetailDto = {
+      ...progress, description: g.description, unit: g.unit,
+      milestones: g.milestones.map((m) => ({ id: m.id, title: m.title, targetValue: m.targetValue == null ? null : dec(m.targetValue), targetDate: dateOrNull(m.targetDate), achievedAt: m.achievedAt?.toISOString() ?? null })),
+      contributions: g.contributions.map((c) => ({ id: c.id, date: dateOrNull(c.date)!, amount: dec(c.amount), note: c.note, transactionId: c.transactionId })),
+    };
+    return detail;
+  });
+
+  // Ajustes de alvo, prazo, prioridade e status (ACHIEVED grava achievedAt).
+  app.patch("/goals/:id", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = parse(UpdateGoalInput, req.body, reply);
+    if (!body) return;
+    const g = await prisma.goal.findFirst({ where: { id, userId: req.userId, deletedAt: null } });
+    if (!g) return reply.code(404).send({ error: "not found" });
+    const { targetDate, ...rest } = body;
+    const updated = await prisma.goal.update({
+      where: { id },
+      data: {
+        ...rest,
+        ...(targetDate !== undefined ? { targetDate: targetDate ? fromISODate(targetDate) : null } : {}),
+        ...(body.status === "ACHIEVED" && g.status !== "ACHIEVED" ? { achievedAt: new Date() } : {}),
+        ...(body.status && body.status !== "ACHIEVED" ? { achievedAt: null } : {}),
+      },
+      include: { contributions: true },
+    });
+    return goalProgress(updated, req.userId, todayISO(config.timezone));
   });
 
   app.post("/goals/:id/contributions", async (req, reply) => {

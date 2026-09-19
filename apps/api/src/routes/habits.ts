@@ -1,10 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma, type Habit, type HabitLog } from "@indice/db";
-import { LogHabitInput, type HabitDto, type HabitLogDto, type HabitTodayDto } from "@indice/shared";
-import { parse, decOrNull, dec } from "../lib/http.js";
+import { CreateHabitInput, LogHabitInput, type HabitDto, type HabitLogDto, type HabitTodayDto } from "@indice/shared";
+import { parse, decOrNull, dec, dateOrNull } from "../lib/http.js";
 import { addDays, fromISODate, hhmmToMinutes, isoWeekday, todayISO, toISODate } from "../lib/dates.js";
 import { config } from "../config.js";
+import { consistency, weekStates } from "../modules/habits/week.js";
 
 export function toHabitDto(h: Habit): HabitDto {
   return {
@@ -55,7 +56,13 @@ export async function habitsToday(userId: string, date: string): Promise<HabitTo
   return habits.map((h) => {
     const m = byHabit.get(h.id) ?? new Map<string, HabitLog>();
     const log = m.get(date) ?? null;
-    return { habit: toHabitDto(h), log: log ? toHabitLogDto(log) : null, done: log?.done ?? false, streak: computeStreak(h, m, date), scheduledToday: h.weekdays.includes(isoWeekday(date)) };
+    const schedule = { weekdays: h.weekdays, startDate: dateOrNull(h.startDate)! };
+    const done = (d: string) => m.get(d)?.done ?? false;
+    return {
+      habit: toHabitDto(h), log: log ? toHabitLogDto(log) : null, done: log?.done ?? false,
+      streak: computeStreak(h, m, date), scheduledToday: h.weekdays.includes(isoWeekday(date)),
+      week: weekStates(schedule, date, done), consistency30: consistency(schedule, date, done),
+    };
   });
 }
 
@@ -72,13 +79,9 @@ export async function habitsRoutes(app: FastifyInstance) {
   });
 
   app.post("/habits", async (req, reply) => {
-    const body = parse(z.object({
-      name: z.string().min(1), kind: z.enum(["BOOLEAN", "COUNTER", "DURATION", "TIME"]).default("BOOLEAN"),
-      icon: z.string().optional(), color: z.string().optional(), unit: z.string().optional(),
-      targetValue: z.number().optional(), targetTime: z.string().optional(), weekdays: z.array(z.number().int().min(1).max(7)).optional(),
-      reminderAt: z.string().optional(), startDate: z.string().optional(),
-    }), req.body, reply);
+    const body = parse(CreateHabitInput, req.body, reply);
     if (!body) return;
+    if (body.kind === "TIME" && !body.targetTime) return reply.code(400).send({ error: "hábito TIME exige targetTime" });
     const count = await prisma.habit.count({ where: { userId: req.userId } });
     const h = await prisma.habit.create({ data: { ...body, userId: req.userId, sortOrder: count, startDate: fromISODate(body.startDate ?? todayISO(config.timezone)) } });
     return reply.code(201).send(toHabitDto(h));
@@ -94,7 +97,13 @@ export async function habitsRoutes(app: FastifyInstance) {
     const date = body.date ?? todayISO(config.timezone);
     let value = body.value;
     if (h.kind === "TIME" && body.time) value = hhmmToMinutes(body.time);
-    if (value == null) value = h.kind === "BOOLEAN" ? 1 : (h.kind === "TIME" ? hhmmToMinutes(new Intl.DateTimeFormat("en-GB", { timeZone: config.timezone, hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date())) : 1);
+    // Valor omitido = marcação rápida (widget/toque): BOOLEAN → 1; COUNTER/DURATION → a
+    // própria meta (feito); TIME → o horário de agora no fuso do usuário.
+    if (value == null) {
+      if (h.kind === "TIME") value = hhmmToMinutes(new Intl.DateTimeFormat("en-GB", { timeZone: config.timezone, hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date()));
+      else if (h.kind === "BOOLEAN") value = 1;
+      else value = decOrNull(h.targetValue) ?? 1;
+    }
     const done = resolveDone(h, value);
     const log = await prisma.habitLog.upsert({
       where: { habitId_date: { habitId: id, date: fromISODate(date) } },
