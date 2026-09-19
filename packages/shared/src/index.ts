@@ -94,14 +94,36 @@ export const LogHabitInput = z.object({
 });
 export type LogHabitInput = z.infer<typeof LogHabitInput>;
 
+// Estado de um dia na régua semanal: feito, perdido, hoje (pendente), fora da
+// escala do hábito ou ainda por vir.
+export const HabitDayStatus = z.enum(["done", "miss", "today", "off", "future"]);
+export const HabitDayDto = z.object({ date: isoDate, status: HabitDayStatus });
+export type HabitDayDto = z.infer<typeof HabitDayDto>;
+
 export const HabitTodayDto = z.object({
   habit: HabitDto,
   log: HabitLogDto.nullable(),
   done: z.boolean(),
   streak: z.number().int(),
   scheduledToday: z.boolean(),
+  week: z.array(HabitDayDto), // 7 dias, segunda a domingo da semana da data
+  consistency30: z.number(), // % dos dias escalados nos últimos 30 com `done`
 });
 export type HabitTodayDto = z.infer<typeof HabitTodayDto>;
+
+export const CreateHabitInput = z.object({
+  name: z.string().min(1),
+  kind: HabitKind.default("BOOLEAN"),
+  icon: z.string().optional(),
+  color: z.string().optional(),
+  unit: z.string().optional(),
+  targetValue: z.number().positive().optional(),
+  targetTime: hhmm.optional(),
+  weekdays: z.array(z.number().int().min(1).max(7)).min(1).optional(),
+  reminderAt: hhmm.optional(),
+  startDate: isoDate.optional(),
+});
+export type CreateHabitInput = z.infer<typeof CreateHabitInput>;
 
 // ── Financeiro ─────────────────────────────────────────────────────────────
 export const TransactionType = z.enum(["EXPENSE", "INCOME", "INVESTMENT", "TRANSFER"]);
@@ -122,8 +144,62 @@ export const TransactionDto = z.object({
   invoiceId: z.string().nullable(),
   installmentNo: z.number().int().nullable(),
   installmentTotal: z.number().int().nullable(),
+  // Rótulos para a linha secundária ("pix · Conta corrente", "crédito · Roxinho ····1234 · fatura 11/26").
+  accountName: z.string().nullable().optional(),
+  toAccountName: z.string().nullable().optional(),
+  creditCardLabel: z.string().nullable().optional(),
+  invoiceRef: z.string().nullable().optional(), // "MM/YYYY"
 });
 export type TransactionDto = z.infer<typeof TransactionDto>;
+
+export const AccountKind = z.enum(["CHECKING", "SAVINGS", "PAYMENT", "CASH", "INVESTMENT"]);
+export const AccountDto = z.object({
+  id: z.string(),
+  name: z.string(),
+  kind: AccountKind,
+  institution: z.string().nullable(),
+  color: z.string().nullable(),
+  isDefault: z.boolean(),
+  balance: money,
+});
+export type AccountDto = z.infer<typeof AccountDto>;
+
+export const CategoryKind = z.enum(["EXPENSE", "INCOME", "INVESTMENT"]);
+export const CategoryDto = z.object({
+  id: z.string(),
+  kind: CategoryKind,
+  name: z.string(),
+  color: z.string().nullable(),
+  icon: z.string().nullable(),
+  system: z.boolean(),
+});
+export type CategoryDto = z.infer<typeof CategoryDto>;
+
+export const CreditCardDto = z.object({ id: z.string(), nickname: z.string(), brand: z.string(), last4: z.string() });
+export const InstitutionDto = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.string(),
+  color: z.string().nullable(),
+  closingDay: z.number().int().nullable(),
+  dueDay: z.number().int().nullable(),
+  cards: z.array(CreditCardDto),
+});
+export type InstitutionDto = z.infer<typeof InstitutionDto>;
+
+export const InvoiceDto = z.object({
+  id: z.string(),
+  institution: z.string(),
+  refYear: z.number().int(),
+  refMonth: z.number().int(),
+  closingDate: isoDate.nullable(),
+  dueDate: isoDate.nullable(),
+  total: money,
+  declaredTotal: money.nullable(),
+  purchases: z.number().int(),
+  status: z.string(),
+});
+export type InvoiceDto = z.infer<typeof InvoiceDto>;
 
 export const CreateTransactionInput = z.object({
   id: z.string().uuid().optional(),
@@ -205,6 +281,40 @@ export const CreateGoalInput = z.object({
 });
 export type CreateGoalInput = z.infer<typeof CreateGoalInput>;
 
+export const UpdateGoalInput = z.object({
+  title: z.string().min(1).optional(),
+  description: z.string().nullable().optional(),
+  status: GoalStatus.optional(),
+  targetValue: z.number().nonnegative().optional(),
+  targetDate: isoDate.nullable().optional(),
+  priority: z.number().int().optional(),
+  color: z.string().nullable().optional(),
+  icon: z.string().nullable().optional(),
+});
+export type UpdateGoalInput = z.infer<typeof UpdateGoalInput>;
+
+export const GoalMilestoneDto = z.object({
+  id: z.string(),
+  title: z.string(),
+  targetValue: money.nullable(),
+  targetDate: isoDate.nullable(),
+  achievedAt: z.string().nullable(),
+});
+export const GoalContributionDto = z.object({
+  id: z.string(),
+  date: isoDate,
+  amount: money,
+  note: z.string().nullable(),
+  transactionId: z.string().nullable(),
+});
+export const GoalDetailDto = GoalProgressDto.extend({
+  description: z.string().nullable(),
+  unit: z.string().nullable(),
+  milestones: z.array(GoalMilestoneDto),
+  contributions: z.array(GoalContributionDto),
+});
+export type GoalDetailDto = z.infer<typeof GoalDetailDto>;
+
 export const ContributeGoalInput = z.object({
   date: isoDate.optional(),
   amount: z.number(),
@@ -248,6 +358,19 @@ export const CreateMediaItemInput = z.object({
   tags: z.array(z.string()).optional(),
 });
 
+export const UpdateMediaItemInput = z.object({
+  status: MediaStatus.optional(),
+  rating: z.number().int().min(1).max(10).optional(),
+  progress: z.number().optional(),
+  progressTotal: z.number().optional(),
+  progressUnit: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  title: z.string().min(1).optional(),
+  creator: z.string().optional(),
+  platform: z.string().optional(),
+});
+export type UpdateMediaItemInput = z.infer<typeof UpdateMediaItemInput>;
+
 export const CreateMediaNoteInput = z.object({
   kind: z.enum(["REVIEW", "LEARNING", "QUOTE", "NOTE"]).default("NOTE"),
   title: z.string().optional(),
@@ -265,6 +388,18 @@ export const DailyLogDto = z.object({
   highlights: z.string().nullable(),
   reflection: z.string().nullable(),
 });
+
+export type DailyLogDto = z.infer<typeof DailyLogDto>;
+
+export const UpsertDailyLogInput = z.object({
+  wokeAt: hhmm.optional(),
+  mood: z.number().int().min(1).max(5).optional(),
+  energy: z.number().int().min(1).max(5).optional(),
+  sleepHours: z.number().min(0).max(24).optional(),
+  highlights: z.string().optional(),
+  reflection: z.string().optional(),
+});
+export type UpsertDailyLogInput = z.infer<typeof UpsertDailyLogInput>;
 
 export const DailySummaryDto = z.object({
   date: isoDate,

@@ -1,6 +1,9 @@
 import { PrismaClient } from "@prisma/client";
+import { loadRootEnv } from "./env.js";
 
 export * from "@prisma/client";
+
+loadRootEnv();
 
 const globalForPrisma = globalThis as unknown as { __indicePrisma?: PrismaClient };
 

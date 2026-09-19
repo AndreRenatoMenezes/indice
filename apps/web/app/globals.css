@@ -19,3 +19,15 @@ body { font-family: ui-sans-serif, system-ui, -apple-system, "Inter", sans-serif
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
 .muted { color: var(--muted); }
 .mono { font-variant-numeric: tabular-nums; }
+.input { border: 1px solid var(--line); border-radius: 6px; background: transparent; padding: 4px 8px; font-size: 14px; color: inherit; min-width: 0; }
+.input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn { border: 1px solid var(--line); border-radius: 6px; padding: 4px 12px; font-size: 14px; background: transparent; color: inherit; cursor: pointer; }
+.btn:hover { border-color: var(--muted); }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-primary:hover { opacity: 0.9; }
+.dot { display: inline-block; width: 14px; height: 14px; border-radius: 999px; border: 1.5px solid var(--muted); }
+.dot-done { background: var(--green); border-color: var(--green); }
+.dot-miss { border-color: var(--red); }
+.dot-today { border-color: var(--fg); border-width: 2px; }
+.dot-off { border-style: dashed; opacity: 0.5; }
+.dot-future { opacity: 0.35; }

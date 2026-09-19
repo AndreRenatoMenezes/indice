@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma, type MediaItem } from "@indice/db";
-import { CreateMediaItemInput, CreateMediaNoteInput, type MediaItemDto } from "@indice/shared";
+import { CreateMediaItemInput, CreateMediaNoteInput, UpdateMediaItemInput, type MediaItemDto } from "@indice/shared";
 import { parse, decOrNull, dateOrNull } from "../lib/http.js";
 import { fromISODate, todayISO } from "../lib/dates.js";
 import { config } from "../config.js";
@@ -43,7 +43,7 @@ export async function mediaRoutes(app: FastifyInstance) {
 
   app.patch("/media/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const body = parse(z.object({ status: z.enum(["WISHLIST", "IN_PROGRESS", "PAUSED", "DONE", "DROPPED"]).optional(), rating: z.number().int().min(1).max(10).optional(), progress: z.number().optional(), progressTotal: z.number().optional(), tags: z.array(z.string()).optional(), title: z.string().optional(), creator: z.string().optional(), platform: z.string().optional() }), req.body, reply);
+    const body = parse(UpdateMediaItemInput, req.body, reply);
     if (!body) return;
     const existing = await prisma.mediaItem.findFirst({ where: { id, userId: req.userId, deletedAt: null } });
     if (!existing) return reply.code(404).send({ error: "not found" });
