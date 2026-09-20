@@ -1,7 +1,13 @@
 # Cloud Build: constrói e publica as duas imagens e faz deploy no Cloud Run.
-# Substituições esperadas: _REGION, _REPO (Artifact Registry), _SQL_INSTANCE
-# (projeto:região:instância), _DB_SECRET (nome do secret com DATABASE_URL),
-# _API_KEY_SECRET (secret com INDICE_API_KEY_WEB).
+#
+# O banco é um Postgres externo (Neon, Supabase ou outro) — não Cloud SQL.
+# São duas connection strings, em dois secrets: a do pooler para o runtime da
+# API (muitas conexões curtas de um serviço que escala a zero) e a direta para
+# as migrações, que o pooler em modo transação não suporta.
+#
+# Substituições esperadas: _REGION, _REPO (Artifact Registry), _DB_SECRET
+# (secret com a URL do pooler), _DB_DIRECT_SECRET (secret com a URL direta),
+# _API_KEY_SECRET (secret com INDICE_API_KEY_WEB), _WEB_ORIGIN.
 steps:
   - name: gcr.io/cloud-builders/docker
     id: build-api
@@ -14,7 +20,8 @@ steps:
   - name: gcr.io/cloud-builders/docker
     args: ["push", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-web:$SHORT_SHA"]
 
-  # Migrações via Cloud Run Job efêmero (mesma imagem da API).
+  # Migrações via Cloud Run Job efêmero (mesma imagem da API), pela conexão
+  # direta: `prisma migrate deploy` usa DDL e statements preparados.
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     id: migrate
     entrypoint: bash
@@ -24,8 +31,7 @@ steps:
         gcloud run jobs deploy indice-migrate \
           --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-api:$SHORT_SHA \
           --region ${_REGION} \
-          --set-cloudsql-instances ${_SQL_INSTANCE} \
-          --set-secrets DATABASE_URL=${_DB_SECRET}:latest \
+          --set-secrets DATABASE_URL=${_DB_DIRECT_SECRET}:latest \
           --command npx --args "prisma,migrate,deploy,--schema,packages/db/prisma/schema.prisma" \
           --quiet
         gcloud run jobs execute indice-migrate --region ${_REGION} --wait
@@ -40,7 +46,6 @@ steps:
       - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-api:$SHORT_SHA
       - --region=${_REGION}
       - --platform=managed
-      - --add-cloudsql-instances=${_SQL_INSTANCE}
       - --set-secrets=DATABASE_URL=${_DB_SECRET}:latest
       - --set-env-vars=NODE_ENV=production,TZ=America/Sao_Paulo,CORS_ORIGIN=${_WEB_ORIGIN}
       - --min-instances=0
@@ -67,8 +72,8 @@ steps:
 substitutions:
   _REGION: southamerica-east1
   _REPO: indice
-  _SQL_INSTANCE: ""
   _DB_SECRET: indice-database-url
+  _DB_DIRECT_SECRET: indice-database-url-direct
   _API_KEY_SECRET: indice-api-key
   _WEB_ORIGIN: "*"
 
