@@ -44,7 +44,7 @@ gcloud run jobs deploy indice-seed --image $REGION-docker.pkg.dev/$PROJECT_ID/in
   --region $REGION --set-cloudsql-instances $CONN \
   --set-secrets DATABASE_URL=indice-database-url:latest,INDICE_API_KEY=indice-api-key:latest \
   --set-env-vars INDICE_USER_EMAIL=seu@email \
-  --command npx --args "tsx,packages/db/prisma/seed.ts"
+  --command node --args "packages/db/dist/seed.js"
 gcloud run jobs execute indice-seed --region $REGION --wait
 ```
 

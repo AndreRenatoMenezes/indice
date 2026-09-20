@@ -7,20 +7,20 @@
       "cache": false
     },
     "build": {
-      "dependsOn": ["^build", "^generate"],
+      "dependsOn": ["^build", "^generate", "generate"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
     },
     "dev": {
-      "dependsOn": ["^generate"],
+      "dependsOn": ["^build", "^generate"],
       "cache": false,
       "persistent": true
     },
     "test": {
-      "dependsOn": ["^generate"],
+      "dependsOn": ["^build", "^generate"],
       "outputs": []
     },
     "typecheck": {
-      "dependsOn": ["^generate"],
+      "dependsOn": ["^build", "^generate"],
       "outputs": []
     },
     "lint": {

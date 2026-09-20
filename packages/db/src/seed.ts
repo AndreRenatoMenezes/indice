@@ -3,7 +3,7 @@
 // A chave de API vem de INDICE_API_KEY (ou é gerada e impressa uma vez).
 import { createHash, randomBytes } from "node:crypto";
 import { PrismaClient, CategoryKind, HabitKind, GoalKind } from "@prisma/client";
-import { loadRootEnv } from "../src/env.js";
+import { loadRootEnv } from "./env.js";
 
 loadRootEnv();
 

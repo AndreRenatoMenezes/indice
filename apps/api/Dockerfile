@@ -13,6 +13,8 @@ COPY tsconfig.base.json ./
 COPY packages ./packages
 COPY apps/api ./apps/api
 RUN npx prisma generate --schema packages/db/prisma/schema.prisma \
+ && npm run build -w @indice/shared \
+ && npm run build -w @indice/db \
  && npm run build -w @indice/api
 
 FROM node:24-alpine AS runtime
@@ -21,10 +23,12 @@ WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./
 COPY --from=build /app/packages/db/package.json ./packages/db/
+COPY --from=build /app/packages/db/dist ./packages/db/dist
 COPY --from=build /app/packages/db/prisma ./packages/db/prisma
 COPY --from=build /app/packages/shared/package.json ./packages/shared/
+COPY --from=build /app/packages/shared/dist ./packages/shared/dist
 COPY --from=build /app/apps/api/package.json ./apps/api/
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 EXPOSE 8080
 USER node
-CMD ["node", "apps/api/dist/apps/api/src/server.js"]
+CMD ["node", "apps/api/dist/server.js"]
