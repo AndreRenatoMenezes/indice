@@ -22,9 +22,6 @@
     "seed": "tsx src/seed.ts",
     "typecheck": "tsc --noEmit"
   },
-  "prisma": {
-    "seed": "tsx src/seed.ts"
-  },
   "dependencies": {
     "@prisma/client": "^6.19.0"
   },

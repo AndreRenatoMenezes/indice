@@ -75,7 +75,8 @@ um pool próprio em cima de um pool que já existe.
 ### Teste local antes de gastar deploy
 
 Vale validar o schema contra o Neon real agora, com a URL **direta** no `.env`
-da raiz como `DATABASE_URL`:
+da raiz como `DATABASE_URL` (a CLI do Prisma encontra esse arquivo por causa de
+`packages/db/prisma.config.ts`, que carrega o `.env` da raiz):
 
 ```bash
 npm run db:deploy   # aplica as migrações
