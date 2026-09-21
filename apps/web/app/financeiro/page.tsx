@@ -1,6 +1,6 @@
 import { getAccounts, getCategories, getDailySummary, getInstitutions, getInvoices, getTransactions, brl, dateBR, shortDate, txSubline, TX_LABEL } from "@/lib/api";
 import { addTransaction, deleteTransaction, payInvoice } from "@/lib/actions";
-import { Card, Empty, Pill, Stat } from "@/components/ui";
+import { Btn, Card, Empty, Field, Frame, Pill, Stat } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -17,8 +17,8 @@ export default async function Financeiro() {
   const monthName = new Date(f.month.year, f.month.month - 1, 1).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
 
   return (
-    <div className="grid gap-4 md:grid-cols-3">
-      <div className="md:col-span-2 grid gap-4">
+    <div className="grid gap-6 md:grid-cols-3">
+      <div className="md:col-span-2 grid gap-6">
         <Card title={`Financeiro · ${monthName}`} aside={<Pill tone={f.trafficLight.status}>{f.trafficLight.label}</Pill>}>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Stat label="Saldo do mês" value={brl(f.balance)} tone={f.balance < 0 ? "red" : undefined} />
@@ -36,34 +36,34 @@ export default async function Financeiro() {
 
         <Card title="Lançamento rápido">
           <form action={addTransaction} className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
-            <select name="type" className="input" aria-label="tipo">
+            <Frame><select name="type" className="input w-full" aria-label="tipo">
               <option value="EXPENSE">Saída</option><option value="INCOME">Entrada</option><option value="INVESTMENT">Aporte</option><option value="TRANSFER">Transferência</option>
-            </select>
-            <input name="date" type="date" required defaultValue={summary.date} className="input" />
-            <input name="amount" type="number" step="0.01" min="0.01" required placeholder="valor" className="input" />
-            <input name="description" placeholder="descrição" className="input" />
-            <select name="paymentMethod" className="input" aria-label="forma de pagamento" defaultValue="PIX">
+            </select></Frame>
+            <Field name="date" type="date" required defaultValue={summary.date} />
+            <Field name="amount" type="number" step="0.01" min="0.01" required placeholder="valor" />
+            <Field name="description" placeholder="descrição" />
+            <Frame><select name="paymentMethod" className="input w-full" aria-label="forma de pagamento" defaultValue="PIX">
               <option value="PIX">Pix</option><option value="DEBIT">Débito</option><option value="CASH">Dinheiro</option><option value="BOLETO">Boleto</option><option value="OTHER">Outro</option>
-            </select>
-            <select name="accountId" className="input" aria-label="conta" defaultValue={defaultAccount?.id ?? ""}>
+            </select></Frame>
+            <Frame><select name="accountId" className="input w-full" aria-label="conta" defaultValue={defaultAccount?.id ?? ""}>
               <option value="">conta (não informada)</option>
               {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
-            <select name="creditCardId" className="input" aria-label="cartão de crédito" defaultValue="">
+            </select></Frame>
+            <Frame><select name="creditCardId" className="input w-full" aria-label="cartão de crédito" defaultValue="">
               <option value="">sem cartão</option>
               {cards.map((c) => <option key={c.id} value={c.id}>crédito · {c.nickname} ····{c.last4}</option>)}
-            </select>
-            <select name="categoryId" className="input" aria-label="categoria" defaultValue="">
+            </select></Frame>
+            <Frame><select name="categoryId" className="input w-full" aria-label="categoria" defaultValue="">
               <option value="">categoria</option>
               <optgroup label="Saída">{byKind("EXPENSE").map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</optgroup>
               <optgroup label="Entrada">{byKind("INCOME").map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</optgroup>
               <optgroup label="Aporte">{byKind("INVESTMENT").map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</optgroup>
-            </select>
-            <select name="toAccountId" className="input" aria-label="conta destino (transferência)" defaultValue="">
+            </select></Frame>
+            <Frame><select name="toAccountId" className="input w-full" aria-label="conta destino (transferência)" defaultValue="">
               <option value="">destino (só transferência)</option>
               {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
-            <button className="btn btn-primary col-span-2 sm:col-span-3">Lançar</button>
+            </select></Frame>
+            <Btn tone="primary" frameClassName="col-span-2 sm:col-span-3">Lançar</Btn>
           </form>
           <p className="mt-2 text-xs muted">Escolher um cartão registra a compra como crédito na fatura do ciclo; a conta só é movimentada quando a fatura for paga.</p>
         </Card>
@@ -88,7 +88,7 @@ export default async function Financeiro() {
         </Card>
       </div>
 
-      <div className="grid gap-4 content-start">
+      <div className="grid gap-6 content-start">
         <Card title="Contas">
           {accounts.map((a) => (
             <div key={a.id} className="flex justify-between py-1 text-sm">
@@ -102,14 +102,14 @@ export default async function Financeiro() {
 
         <Card title="Faturas">
           {invoices.slice(0, 8).map((i) => (
-            <div key={i.id} className="border-t py-2 text-sm first:border-t-0" style={{ borderColor: "var(--line)" }}>
+            <div key={i.id} className="py-2 text-sm">
               <div className="flex justify-between"><span>{i.institution} · {String(i.refMonth).padStart(2, "0")}/{i.refYear}</span><span className="mono">{brl(i.total)}</span></div>
               <div className="text-xs muted">{i.status.toLowerCase() === "open" ? "aberta" : i.status.toLowerCase() === "closed" ? "fechada" : "paga"} · fecha {dateBR(i.closingDate)} · vence {dateBR(i.dueDate)} · {i.purchases} compra{i.purchases === 1 ? "" : "s"}</div>
               {i.status !== "PAID" && accounts.length > 0 && (
                 <form action={payInvoice.bind(null, i.id)} className="mt-1 flex gap-1 text-xs">
-                  <select name="accountId" className="input flex-1" defaultValue={defaultAccount?.id}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
-                  <input name="amount" type="number" step="0.01" placeholder={String(i.total)} className="input w-24" />
-                  <button className="btn">Pagar</button>
+                  <Frame className="flex-1"><select name="accountId" className="input w-full" defaultValue={defaultAccount?.id}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Frame>
+                  <Field name="amount" type="number" step="0.01" placeholder={String(i.total)} frameClassName="w-24" />
+                  <Btn>Pagar</Btn>
                 </form>
               )}
             </div>

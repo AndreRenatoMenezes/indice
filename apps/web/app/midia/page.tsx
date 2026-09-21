@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { getMedia, dateBR, MEDIA_KIND_LABEL, MEDIA_STATUS_LABEL } from "@/lib/api";
 import { addMedia, setMediaProgress, updateMedia } from "@/lib/actions";
-import { Card, Empty, Progress } from "@/components/ui";
+import { Btn, Card, Empty, Field, Frame, Progress } from "@/components/ui";
+import { MUTED, PALETTE } from "@/components/palette";
 
 export const dynamic = "force-dynamic";
 
@@ -13,10 +14,10 @@ export default async function Midia({ searchParams }: { searchParams: Promise<{ 
   const { items } = await getMedia(kind ? `?kind=${kind}` : "");
 
   return (
-    <div className="grid gap-4 md:grid-cols-3">
-      <div className="md:col-span-2 grid gap-4">
-        <div className="flex gap-2 text-sm">
-          {FILTERS.map(([v, l]) => <Link key={v} href={v ? `/midia?kind=${v}` : "/midia"} className="btn" style={v === kind ? { background: "var(--accent)", borderColor: "var(--accent)", color: "white" } : undefined}>{l}</Link>)}
+    <div className="grid gap-6 md:grid-cols-3">
+      <div className="md:col-span-2 grid gap-6">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          {FILTERS.map(([v, l]) => <Frame key={v} fill={v === kind ? PALETTE.yellow[0] : undefined}><Link href={v ? `/midia?kind=${v}` : "/midia"} className="btn">{l}</Link></Frame>)}
         </div>
         {GROUPS.map((g) => {
           const list = items.filter((i) => i.status === g);
@@ -27,9 +28,9 @@ export default async function Midia({ searchParams }: { searchParams: Promise<{ 
                 {list.map((m) => {
                   const pct = m.progress != null && m.progressTotal ? (m.progress / m.progressTotal) * 100 : null;
                   return (
-                    <li key={m.id} className="border-t pt-3 first:border-t-0 first:pt-0" style={{ borderColor: "var(--line)" }}>
+                    <li key={m.id} className="pt-3 first:pt-0">
                       <div className="flex items-start gap-3">
-                        <span className="mono rounded px-1.5 py-0.5 text-[10px] uppercase" style={{ background: "var(--line)" }}>{MEDIA_KIND_LABEL[m.kind]}</span>
+                        <Frame radius={4} strokeWidth={1} stroke={MUTED}><span className="mono px-1.5 py-0.5 text-[10px] uppercase">{MEDIA_KIND_LABEL[m.kind]}</span></Frame>
                         <div className="flex-1">
                           <div className="font-medium">{m.title}</div>
                           <div className="text-xs muted">{[m.creator, m.platform, m.year].filter(Boolean).join(" · ")}</div>
@@ -41,14 +42,14 @@ export default async function Midia({ searchParams }: { searchParams: Promise<{ 
                         </div>
                       </div>
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                        {m.status !== "IN_PROGRESS" && m.status !== "DONE" && <form action={updateMedia.bind(null, m.id, { status: "IN_PROGRESS" })}><button className="btn">Começar</button></form>}
-                        {m.status === "IN_PROGRESS" && <form action={updateMedia.bind(null, m.id, { status: "PAUSED" })}><button className="btn">Pausar</button></form>}
-                        {m.status !== "DONE" && <form action={updateMedia.bind(null, m.id, { status: "DONE" })}><button className="btn">Concluir</button></form>}
-                        {m.status !== "DROPPED" && m.status !== "DONE" && <form action={updateMedia.bind(null, m.id, { status: "DROPPED" })}><button className="btn">Abandonar</button></form>}
+                        {m.status !== "IN_PROGRESS" && m.status !== "DONE" && <form action={updateMedia.bind(null, m.id, { status: "IN_PROGRESS" })}><Btn>Começar</Btn></form>}
+                        {m.status === "IN_PROGRESS" && <form action={updateMedia.bind(null, m.id, { status: "PAUSED" })}><Btn>Pausar</Btn></form>}
+                        {m.status !== "DONE" && <form action={updateMedia.bind(null, m.id, { status: "DONE" })}><Btn>Concluir</Btn></form>}
+                        {m.status !== "DROPPED" && m.status !== "DONE" && <form action={updateMedia.bind(null, m.id, { status: "DROPPED" })}><Btn>Abandonar</Btn></form>}
                         <form action={setMediaProgress.bind(null, m.id)} className="ml-auto flex gap-1">
-                          {m.status === "IN_PROGRESS" && <input name="progress" type="number" step="any" min="0" placeholder={m.progressUnit ?? "progresso"} className="input w-24" />}
-                          <input name="rating" type="number" min="1" max="10" placeholder="nota" className="input w-16" />
-                          <button className="btn">Salvar</button>
+                          {m.status === "IN_PROGRESS" && <Field name="progress" type="number" step="any" min="0" placeholder={m.progressUnit ?? "progresso"} frameClassName="w-24" />}
+                          <Field name="rating" type="number" min="1" max="10" placeholder="nota" frameClassName="w-16" />
+                          <Btn>Salvar</Btn>
                         </form>
                       </div>
                     </li>
@@ -61,19 +62,19 @@ export default async function Midia({ searchParams }: { searchParams: Promise<{ 
         {!items.length && <Empty>Arquivo vazio.</Empty>}
       </div>
 
-      <div className="grid gap-4 content-start">
+      <div className="grid gap-6 content-start">
         <Card title="Novo item">
           <form action={addMedia} className="grid gap-2 text-sm">
-            <select name="kind" className="input" defaultValue={kind || "BOOK"}>{Object.entries(MEDIA_KIND_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
-            <input name="title" required placeholder="título" className="input" />
-            <input name="creator" placeholder="autor / estúdio / instituição" className="input" />
-            <input name="platform" placeholder="plataforma (Kindle, PS5, físico)" className="input" />
+            <Frame><select name="kind" className="input w-full" defaultValue={kind || "BOOK"}>{Object.entries(MEDIA_KIND_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Frame>
+            <Field name="title" required placeholder="título" />
+            <Field name="creator" placeholder="autor / estúdio / instituição" />
+            <Field name="platform" placeholder="plataforma (Kindle, PS5, físico)" />
             <div className="grid grid-cols-2 gap-2">
-              <input name="progressTotal" type="number" step="any" min="0" placeholder="total (320)" className="input" />
-              <input name="progressUnit" placeholder="unidade (páginas, h, %)" className="input" />
+              <Field name="progressTotal" type="number" step="any" min="0" placeholder="total (320)" />
+              <Field name="progressUnit" placeholder="unidade (páginas, h, %)" />
             </div>
-            <select name="status" className="input" defaultValue="WISHLIST"><option value="WISHLIST">Quero</option><option value="IN_PROGRESS">Em andamento</option></select>
-            <button className="btn btn-primary">Adicionar</button>
+            <Frame><select name="status" className="input w-full" defaultValue="WISHLIST"><option value="WISHLIST">Quero</option><option value="IN_PROGRESS">Em andamento</option></select></Frame>
+            <Btn tone="primary">Adicionar</Btn>
           </form>
         </Card>
       </div>

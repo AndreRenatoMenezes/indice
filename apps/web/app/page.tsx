@@ -1,6 +1,8 @@
 import { getDailySummary, brl, dateBR, habitSubline } from "@/lib/api";
 import { addEntry, deleteEntry, logHabit, migrateEntry, toggleEntry, upsertDailyLog } from "@/lib/actions";
-import { Card, Empty, Pill, Progress, Stat } from "@/components/ui";
+import { Btn, Card, Empty, Field, Frame, Pill, Progress, SketchLine, Stat } from "@/components/ui";
+import { PALETTE } from "@/components/palette";
+import { Sketch } from "@/components/sketch";
 
 export const dynamic = "force-dynamic";
 
@@ -21,12 +23,13 @@ export default async function Today({ searchParams }: { searchParams: Promise<{ 
   const scheduled = s.habits.filter((h) => h.scheduledToday).length;
 
   return (
-    <div className="grid gap-4 md:grid-cols-3">
-      <div className="md:col-span-2 grid gap-4">
+    <div className="grid gap-6 md:grid-cols-3">
+      <div className="md:col-span-2 grid gap-6">
         <Card title={`Hoje · ${dateBR(s.date)} · ${WEEKDAYS[s.weekday]}`} aside={<Pill tone={f.trafficLight.status}>{f.trafficLight.label}</Pill>}>
           <ul className="space-y-1">
-            {s.journal.entries.map((e) => (
-              <li key={e.id} className="group flex items-center gap-2 text-sm">
+            {s.journal.entries.map((e, i) => (
+              <li key={e.id} className="group relative flex items-center gap-2 text-sm">
+                {i > 0 && <SketchLine strokeWidth={0.8} stroke={PALETTE.gray[1]} className="absolute -top-1 left-0 right-0" />}
                 <form action={toggleEntry.bind(null, e.id, e.status !== "DONE")}>
                   <button className="mono w-5 text-left" title={e.status === "DONE" ? "reabrir" : "concluir"}>{e.status === "DONE" ? "×" : GLYPH[e.kind]}</button>
                 </form>
@@ -41,12 +44,14 @@ export default async function Today({ searchParams }: { searchParams: Promise<{ 
           </ul>
           <form action={addEntry} className="mt-3 flex gap-2">
             <input type="hidden" name="date" value={s.date} />
-            <select name="kind" className="input" aria-label="tipo">
-              <option value="TASK">• tarefa</option><option value="EVENT">○ evento</option><option value="NOTE">– nota</option>
-            </select>
-            <input name="text" placeholder="novo bullet" required className="input flex-1" />
-            <input name="time" type="time" className="input" aria-label="hora" />
-            <button className="btn btn-primary">Adicionar</button>
+            <Frame>
+              <select name="kind" className="input" aria-label="tipo">
+                <option value="TASK">• tarefa</option><option value="EVENT">○ evento</option><option value="NOTE">– nota</option>
+              </select>
+            </Frame>
+            <Field name="text" placeholder="novo bullet" required frameClassName="flex-1" />
+            <Field name="time" type="time" aria-label="hora" />
+            <Btn tone="primary">Adicionar</Btn>
           </form>
           {s.journal.carriedOver.length > 0 && (
             <div className="mt-4">
@@ -56,8 +61,8 @@ export default async function Today({ searchParams }: { searchParams: Promise<{ 
                   <li key={e.id} className="flex items-center gap-2 text-sm">
                     <span className="mono text-xs muted">{dateBR(e.date)}</span>
                     <span className="flex-1">{e.text}</span>
-                    <form action={migrateEntry.bind(null, e.id, s.date)}><button className="btn text-xs">migrar →</button></form>
-                    <form action={toggleEntry.bind(null, e.id, true)}><button className="btn text-xs">concluir</button></form>
+                    <form action={migrateEntry.bind(null, e.id, s.date)}><Btn className="text-xs">migrar →</Btn></form>
+                    <form action={toggleEntry.bind(null, e.id, true)}><Btn className="text-xs">concluir</Btn></form>
                   </li>
                 ))}
               </ul>
@@ -68,9 +73,10 @@ export default async function Today({ searchParams }: { searchParams: Promise<{ 
         <Card title="Hábitos" aside={<span className="text-xs muted">{doneHabits} de {scheduled} hoje</span>}>
           <ul className="grid gap-2 sm:grid-cols-3">
             {s.habits.map((h) => (
-              <li key={h.habit.id} className={`rounded border p-2 text-sm ${!h.scheduledToday ? "opacity-50" : ""}`} style={{ borderColor: "var(--line)", background: h.done ? "color-mix(in srgb, var(--green) 15%, transparent)" : undefined }}>
-                <form action={logHabit.bind(null, h.habit.id, !h.done, s.date)}>
-                  <button className="w-full text-left">
+              <li key={h.habit.id} className={`relative p-2 text-sm ${!h.scheduledToday ? "opacity-50" : ""}`}>
+                <Sketch radius={8} strokeWidth={1.2} fill={h.done ? PALETTE.green[0] : undefined} />
+                <form action={logHabit.bind(null, h.habit.id, !h.done, s.date)} className="relative">
+                  <button className="w-full cursor-pointer text-left">
                     <div className="flex items-center justify-between">
                       <span>{h.done ? "✓" : "○"} {h.habit.name}</span>
                       <span className="mono text-xs muted">{h.streak}d</span>
@@ -89,18 +95,18 @@ export default async function Today({ searchParams }: { searchParams: Promise<{ 
         <Card title="Diário do dia">
           <form action={upsertDailyLog} className="flex flex-wrap items-end gap-3 text-sm">
             <input type="hidden" name="date" value={s.date} />
-            <label className="grid gap-1 text-xs muted">acordei às<input name="wokeAt" type="time" defaultValue={log?.wokeAt ?? ""} className="input" /></label>
-            <label className="grid gap-1 text-xs muted">humor 1–5<input name="mood" type="number" min={1} max={5} defaultValue={log?.mood ?? ""} className="input w-16" /></label>
-            <label className="grid gap-1 text-xs muted">energia 1–5<input name="energy" type="number" min={1} max={5} defaultValue={log?.energy ?? ""} className="input w-16" /></label>
-            <label className="grid gap-1 text-xs muted">sono (h)<input name="sleepHours" type="number" step="0.5" min={0} max={24} defaultValue={log?.sleepHours ?? ""} className="input w-20" /></label>
-            <label className="grid flex-1 gap-1 text-xs muted">destaque<input name="highlights" defaultValue={log?.highlights ?? ""} placeholder="o que marcou o dia" className="input" /></label>
-            <button className="btn">Salvar</button>
+            <label className="grid gap-1 text-xs muted">acordei às<Field name="wokeAt" type="time" defaultValue={log?.wokeAt ?? ""} /></label>
+            <label className="grid gap-1 text-xs muted">humor 1–5<Field name="mood" type="number" min={1} max={5} defaultValue={log?.mood ?? ""} frameClassName="w-20" /></label>
+            <label className="grid gap-1 text-xs muted">energia 1–5<Field name="energy" type="number" min={1} max={5} defaultValue={log?.energy ?? ""} frameClassName="w-20" /></label>
+            <label className="grid gap-1 text-xs muted">sono (h)<Field name="sleepHours" type="number" step="0.5" min={0} max={24} defaultValue={log?.sleepHours ?? ""} frameClassName="w-24" /></label>
+            <label className="grid flex-1 gap-1 text-xs muted">destaque<Field name="highlights" defaultValue={log?.highlights ?? ""} placeholder="o que marcou o dia" /></label>
+            <Btn>Salvar</Btn>
           </form>
         </Card>
       </div>
 
-      <div className="grid gap-4 content-start">
-        <Card title={`Financeiro · ${new Date(f.month.year, f.month.month - 1, 1).toLocaleDateString("pt-BR", { month: "long" })}`} aside={<span className="text-xs muted">{f.daysRemaining} dias restantes</span>}>
+      <div className="grid gap-6 content-start">
+        <Card tone="yellow" title={`Financeiro · ${new Date(f.month.year, f.month.month - 1, 1).toLocaleDateString("pt-BR", { month: "long" })}`} aside={<span className="text-xs muted">{f.daysRemaining} dias restantes</span>}>
           <div className="grid grid-cols-2 gap-3">
             <Stat label="Saldo do mês" value={brl(f.balance)} tone={f.balance < 0 ? "red" : undefined} />
             <Stat label="Por dia" value={brl(f.dailyBudget)} tone={f.trafficLight.status} />

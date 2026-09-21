@@ -147,10 +147,10 @@ completo de uma imagem fica
 Três segredos: as duas URLs do banco e a chave de API do Índice.
 
 ```bash
-read -rs POOLER_URL && printf '%s' "$POOLER_URL" \
+read -rs POOLER_URL && printf '%s' "postgresql://neondb_owner:npg_WG4skMlBUw3z@ep-gentle-truth-acwejpd3-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&pgbouncer=true&connection_limit=1" \
   | gcloud secrets create indice-database-url --data-file=- && unset POOLER_URL
 
-read -rs DIRECT_URL && printf '%s' "$DIRECT_URL" \
+read -rs DIRECT_URL && printf '%s' "postgresql://neondb_owner:npg_WG4skMlBUw3z@ep-gentle-truth-acwejpd3.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require" \
   | gcloud secrets create indice-database-url-direct --data-file=- && unset DIRECT_URL
 
 openssl rand -base64 32 | tr -d '\n' \
