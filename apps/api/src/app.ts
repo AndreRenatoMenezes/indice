@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import rateLimit from "@fastify/rate-limit";
 import sensible from "@fastify/sensible";
 import { prisma } from "@indice/db";
 import { config } from "./config.js";
@@ -19,6 +20,25 @@ export async function buildApp() {
 
   await app.register(cors, { origin: config.corsOrigin === "*" ? true : config.corsOrigin.split(","), credentials: true });
   await app.register(sensible);
+
+  // A API fica pública no Cloud Run; só a chave protege. O limite contém força
+  // bruta na chave e engano de cliente, com folga para uso normal do app.
+  // `global: false` + hook de instância: os hooks de rota do plugin rodariam
+  // depois do `authPlugin`, e chave inválida nunca seria contada.
+  await app.register(rateLimit, {
+    global: false,
+    max: config.rateLimitMax,
+    timeWindow: "1 minute",
+    // Por chave de API quando houver: um único IP pode ser o web e o celular.
+    keyGenerator: (req) => {
+      const key = req.headers["x-api-key"];
+      if (typeof key === "string" && key) return key;
+      const auth = req.headers.authorization;
+      if (auth?.startsWith("Bearer ")) return auth.slice(7);
+      return req.ip;
+    },
+  });
+  app.addHook("onRequest", app.rateLimit());
 
   // Aceita POST com content-type JSON e corpo vazio (Cloud Scheduler, widgets):
   // o parser padrão do Fastify rejeita, e várias rotas de ação não precisam de corpo.

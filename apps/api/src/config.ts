@@ -5,5 +5,6 @@ export const config = {
   // Chave estática de desenvolvimento: evita seed só para subir a API local.
   devApiKey: process.env.NODE_ENV === "production" ? null : (process.env.INDICE_API_KEY ?? "dev-local-key"),
   devUserEmail: process.env.INDICE_USER_EMAIL ?? "andre@indice.local",
+  rateLimitMax: Number(process.env.RATE_LIMIT_MAX ?? 300),
   timezone: process.env.TZ ?? "America/Sao_Paulo",
 } as const;

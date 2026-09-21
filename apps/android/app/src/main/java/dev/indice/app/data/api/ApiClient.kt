@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit
 object ApiClient {
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false; coerceInputValues = true }
 
-    fun create(context: Context, baseUrl: String = BuildConfig.API_BASE_URL, apiKey: String = BuildConfig.DEV_API_KEY): IndiceApi {
+    fun create(context: Context, baseUrl: String = BuildConfig.API_BASE_URL, apiKey: String = BuildConfig.API_KEY): IndiceApi {
         val auth = Interceptor { chain ->
             chain.proceed(chain.request().newBuilder().header("X-Api-Key", apiKey).build())
         }

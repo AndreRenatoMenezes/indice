@@ -1,6 +1,8 @@
 // Carrega o `.env` da raiz do monorepo quando DATABASE_URL não veio do ambiente.
-// Só a CLI do Prisma lê `.env` sozinha; o cliente, a API (`tsx watch`) e o seed
-// não leem. Em produção (Cloud Run) a variável já existe e nada é lido.
+// Ninguém aqui lê esse arquivo sozinho: nem o cliente, nem a API (`tsx watch`),
+// nem o seed — e nem a CLI do Prisma, que roda com o cwd em `packages/db` e
+// procuraria um `.env` local. Por isso `prisma.config.ts` chama esta função.
+// Em produção (Cloud Run) a variável já vem do ambiente e nada é lido.
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";

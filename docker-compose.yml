@@ -29,7 +29,7 @@ services:
       INDICE_USER_EMAIL: ${INDICE_USER_EMAIL:-andre@indice.local}
       CORS_ORIGIN: http://localhost:3000
       PORT: "8080"
-    command: sh -c "npx prisma migrate deploy --schema packages/db/prisma/schema.prisma && node apps/api/dist/apps/api/src/server.js"
+    command: sh -c "npx prisma migrate deploy --schema packages/db/prisma/schema.prisma && node apps/api/dist/server.js"
     ports:
       - "8080:8080"
     depends_on:

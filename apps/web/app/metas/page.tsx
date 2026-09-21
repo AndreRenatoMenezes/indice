@@ -1,6 +1,6 @@
 import { getGoals, getGoal, brl, dateBR, GOAL_KIND_LABEL } from "@/lib/api";
 import { addGoal, addGoalContribution, setGoalTarget, updateGoal } from "@/lib/actions";
-import { Card, Empty, Progress } from "@/components/ui";
+import { Btn, Card, Empty, Field, Frame, Progress } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -14,8 +14,8 @@ export default async function Metas() {
   const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
   return (
-    <div className="grid gap-4 md:grid-cols-3">
-      <div className="md:col-span-2 grid gap-4">
+    <div className="grid gap-6 md:grid-cols-3">
+      <div className="md:col-span-2 grid gap-6">
         <div className="text-xs muted">{active} ativa{active === 1 ? "" : "s"}</div>
         {details.map((g) => (
           <Card key={g.id} title={g.title} aside={<span className="text-xs muted">{GOAL_KIND_LABEL[g.kind]} · prioridade {details.indexOf(g) + 1} · {STATUS_LABEL[g.status]}</span>}>
@@ -48,39 +48,39 @@ export default async function Metas() {
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <form action={addGoalContribution.bind(null, g.id)} className="flex flex-1 gap-2 text-sm">
-                <input name="amount" type="number" step="0.01" required placeholder="aporte" className="input w-28" />
-                <input name="date" type="date" className="input" aria-label="data" />
-                <input name="note" placeholder="nota" className="input flex-1" />
-                <button className="btn btn-primary">Registrar</button>
+                <Field name="amount" type="number" step="0.01" required placeholder="aporte" frameClassName="w-28" />
+                <Field name="date" type="date" aria-label="data" />
+                <Field name="note" placeholder="nota" frameClassName="flex-1" />
+                <Btn tone="primary">Registrar</Btn>
               </form>
               <a href={`${apiBase}/goals/${g.id}/export?format=csv`} className="text-xs underline muted">CSV</a>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-              <form action={setGoalTarget.bind(null, g.id)} className="flex gap-1"><input name="targetValue" type="number" step="0.01" min="0" defaultValue={g.targetValue} className="input w-32" aria-label="alvo" /><button className="btn">Ajustar alvo</button></form>
-              {g.status === "ACTIVE" && <form action={updateGoal.bind(null, g.id, { status: "PAUSED" })}><button className="btn">Pausar</button></form>}
-              {g.status !== "ACTIVE" && <form action={updateGoal.bind(null, g.id, { status: "ACTIVE" })}><button className="btn">Reativar</button></form>}
-              {g.status !== "ACHIEVED" && <form action={updateGoal.bind(null, g.id, { status: "ACHIEVED" })}><button className="btn">Alcançada</button></form>}
+              <form action={setGoalTarget.bind(null, g.id)} className="flex gap-1"><Field name="targetValue" type="number" step="0.01" min="0" defaultValue={g.targetValue} aria-label="alvo" frameClassName="w-32" /><Btn>Ajustar alvo</Btn></form>
+              {g.status === "ACTIVE" && <form action={updateGoal.bind(null, g.id, { status: "PAUSED" })}><Btn>Pausar</Btn></form>}
+              {g.status !== "ACTIVE" && <form action={updateGoal.bind(null, g.id, { status: "ACTIVE" })}><Btn>Reativar</Btn></form>}
+              {g.status !== "ACHIEVED" && <form action={updateGoal.bind(null, g.id, { status: "ACHIEVED" })}><Btn>Alcançada</Btn></form>}
             </div>
           </Card>
         ))}
         {!goals.length && <Empty>Nenhuma meta.</Empty>}
       </div>
 
-      <div className="grid gap-4 content-start">
+      <div className="grid gap-6 content-start">
         <Card title="Nova meta">
           <form action={addGoal} className="grid gap-2 text-sm">
-            <input name="title" required placeholder="título" className="input" />
-            <select name="kind" className="input" defaultValue="FINANCIAL">
+            <Field name="title" required placeholder="título" />
+            <Frame><select name="kind" className="input w-full" defaultValue="FINANCIAL">
               <option value="FINANCIAL">financeira (R$)</option><option value="NUMERIC">numérica (unidades)</option><option value="HABIT">de hábito (%)</option><option value="MILESTONE">por marcos</option>
-            </select>
+            </select></Frame>
             <div className="grid grid-cols-2 gap-2">
-              <input name="targetValue" type="number" step="0.01" min="0" required placeholder="alvo" className="input" />
-              <input name="unit" placeholder="unidade (livros, km)" className="input" />
+              <Field name="targetValue" type="number" step="0.01" min="0" required placeholder="alvo" />
+              <Field name="unit" placeholder="unidade (livros, km)" />
             </div>
-            <label className="grid gap-1 text-xs muted">prazo<input name="targetDate" type="date" className="input" /></label>
-            <input name="priority" type="number" min="0" max="9" placeholder="prioridade (maior = primeiro)" className="input" />
-            <textarea name="description" placeholder="descrição" className="input" rows={2} />
-            <button className="btn btn-primary">Criar</button>
+            <label className="grid gap-1 text-xs muted">prazo<Field name="targetDate" type="date" /></label>
+            <Field name="priority" type="number" min="0" max="9" placeholder="prioridade (maior = primeiro)" />
+            <Frame><textarea name="description" placeholder="descrição" className="input w-full" rows={2} /></Frame>
+            <Btn tone="primary">Criar</Btn>
           </form>
         </Card>
       </div>

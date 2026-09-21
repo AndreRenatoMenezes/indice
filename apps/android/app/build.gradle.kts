@@ -5,6 +5,12 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// Release aponta para o Cloud Run: passe `-Pindice.apiBaseUrl=https://.../`
+// e `-Pindice.apiKey=...` (ou deixe fixo em ~/.gradle/gradle.properties, fora
+// do repositório). O debug continua falando com a API local do emulador.
+val releaseApiBaseUrl = providers.gradleProperty("indice.apiBaseUrl").getOrElse("")
+val releaseApiKey = providers.gradleProperty("indice.apiKey").getOrElse("")
+
 android {
     namespace = "dev.indice.app"
     compileSdk = 35
@@ -15,19 +21,31 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
-        // URL da API e chave de dev. Em release, use BuildConfig por flavor ou DataStore com a chave digitada nas configurações.
-        buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8080/\"")
-        buildConfigField("String", "DEV_API_KEY", "\"dev-local-key\"")
     }
     buildTypes {
+        debug {
+            buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8080/\"")
+            buildConfigField("String", "API_KEY", "\"dev-local-key\"")
+        }
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            buildConfigField("String", "API_BASE_URL", "\"$releaseApiBaseUrl\"")
+            buildConfigField("String", "API_KEY", "\"$releaseApiKey\"")
         }
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true; buildConfig = true }
+}
+
+// Sem as propriedades, o APK de release sairia apontando para lugar nenhum.
+tasks.matching { it.name == "generateReleaseBuildConfig" }.configureEach {
+    doFirst {
+        require(releaseApiBaseUrl.isNotBlank() && releaseApiKey.isNotBlank()) {
+            "Build de release exige -Pindice.apiBaseUrl=https://SEU-API.run.app/ e -Pindice.apiKey=CHAVE"
+        }
+    }
 }
 
 dependencies {
