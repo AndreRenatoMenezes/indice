@@ -24,7 +24,7 @@ export default async function Habitos({ searchParams }: { searchParams: Promise<
           <ul className="grid gap-3">
             {habits.map((h) => (
               <li key={h.habit.id} className="relative p-3 text-sm">
-                <Sketch radius={8} strokeWidth={1.2} />
+                <Sketch radius={8} strokeWidth={0.9} />
                 <div className="relative flex items-start justify-between gap-3">
                   <div className="flex-1">
                     <div className="font-medium">{h.habit.name}</div>
@@ -36,7 +36,7 @@ export default async function Habitos({ searchParams }: { searchParams: Promise<
                     <div className="text-[10px] uppercase muted">sequência</div>
                   </div>
                   <form action={logHabit.bind(null, h.habit.id, !h.done, date)}>
-                    <Frame radius={20} strokeWidth={1.2} fill={h.done ? PALETTE.green[0] : undefined}><button className="btn h-10 w-10 px-0 text-center text-lg" title={h.done ? "desmarcar" : "marcar como feito"}>{h.done ? "✓" : "○"}</button></Frame>
+                    <Frame radius={20} strokeWidth={0.9} fill={h.done ? PALETTE.green[0] : undefined}><button className="btn h-10 w-10 px-0 text-center text-lg" title={h.done ? "desmarcar" : "marcar como feito"}>{h.done ? "✓" : "○"}</button></Frame>
                   </form>
                 </div>
                 <div className="relative mt-3 flex flex-wrap items-center justify-between gap-3">

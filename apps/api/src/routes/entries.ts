@@ -43,6 +43,7 @@ export async function entriesRoutes(app: FastifyInstance) {
     const q = parse(z.object({
       date: z.string().optional(), collectionId: z.string().optional(),
       status: z.string().optional(), before: z.string().optional(),
+      from: z.string().optional(), to: z.string().optional(),
     }), req.query, reply);
     if (!q) return;
     if (q.date) return listEntriesForDate(req.userId, q.date);
@@ -51,6 +52,11 @@ export async function entriesRoutes(app: FastifyInstance) {
     if (q.collectionId) where.collectionId = q.collectionId;
     if (q.status) where.status = q.status as Entry["status"];
     if (q.before) where.date = { lt: fromISODate(q.before) };
+    // Intervalo fechado, para montar a semana do spread numa chamada só.
+    if (q.from || q.to) where.date = {
+      ...(q.from ? { gte: fromISODate(q.from) } : {}),
+      ...(q.to ? { lte: fromISODate(q.to) } : {}),
+    };
     const rows = await prisma.entry.findMany({ where, orderBy: [{ date: "asc" }, { position: "asc" }], take: 500 });
     return { entries: sortEntries(rows).map((r) => toEntryDto(r)) };
   });

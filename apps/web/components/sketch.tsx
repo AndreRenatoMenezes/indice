@@ -2,6 +2,7 @@
 
 // Molduras desenhadas à mão, no mesmo vocabulário dos artboards de `design/`:
 // rough.js com seed estável por elemento, traço por cima do conteúdo do pai.
+// Traço fino e quase reto: roughness e bowing baixos, sempre em uma passada só.
 // O pai precisa ser `position: relative` — os componentes de `ui.tsx` já são.
 import { useEffect, useId, useRef, useState } from "react";
 import rough from "roughjs";
@@ -47,24 +48,23 @@ export type SketchProps = {
   fill?: string;
   fillStyle?: Options["fillStyle"];
   dash?: boolean;
-  /** Traço único, sem a segunda passada do rough. */
+  /** Sem efeito: o traço já é sempre único. Mantida para não quebrar chamadas. */
   single?: boolean;
   roughness?: number;
 };
 
 /** Retângulo desenhado à mão que cobre o elemento pai. */
-export function Sketch({ radius = 10, strokeWidth = 1.3, stroke = INK, fill, fillStyle = "solid", dash, single, roughness = 1 }: SketchProps) {
+export function Sketch({ radius = 10, strokeWidth = 1, stroke = INK, fill, fillStyle = "solid", dash, roughness = 0.3 }: SketchProps) {
   const ref = useRef<SVGSVGElement>(null);
   const size = useParentSize(ref);
   const seed = seedFrom(useId());
-  const pad = 5;
+  const pad = 2;
 
   let paths: ReturnType<typeof generator.toPaths> = [];
   if (size && size.w > 0 && size.h > 0) {
-    const options: Options = { seed, roughness, strokeWidth, stroke, bowing: 1 };
-    if (fill) { options.fill = fill; options.fillStyle = fillStyle; options.hachureAngle = -41; options.hachureGap = 6; options.fillWeight = 0.7; }
-    if (dash) options.strokeLineDash = [7, 7];
-    if (single) options.disableMultiStroke = true;
+    const options: Options = { seed, roughness, strokeWidth, stroke, bowing: 0.18, disableMultiStroke: true };
+    if (fill) { options.fill = fill; options.fillStyle = fillStyle; options.hachureAngle = -41; options.hachureGap = 4.5; options.fillWeight = 0.5; }
+    if (dash) options.strokeLineDash = [5, 4];
     const drawable = radius > 0
       ? generator.path(roundRectPath(size.w, size.h, radius), options)
       : generator.rectangle(0, 0, size.w, size.h, options);
@@ -86,7 +86,7 @@ export function Sketch({ radius = 10, strokeWidth = 1.3, stroke = INK, fill, fil
 }
 
 /** Linha horizontal desenhada à mão, ocupando a largura disponível. */
-export function SketchLine({ stroke = INK, strokeWidth = 1, className }: { stroke?: string; strokeWidth?: number; className?: string }) {
+export function SketchLine({ stroke = INK, strokeWidth = 0.6, className }: { stroke?: string; strokeWidth?: number; className?: string }) {
   const ref = useRef<SVGSVGElement>(null);
   const [w, setW] = useState(0);
   const seed = seedFrom(useId());
@@ -100,7 +100,7 @@ export function SketchLine({ stroke = INK, strokeWidth = 1, className }: { strok
     return () => observer.disconnect();
   }, []);
   const paths = w > 0
-    ? generator.toPaths(generator.line(0, 0, w, 0, { seed, roughness: 0.8, strokeWidth, stroke, bowing: 0.6, disableMultiStroke: true }))
+    ? generator.toPaths(generator.line(0, 0, w, 0, { seed, roughness: 0.3, strokeWidth, stroke, bowing: 0.15, disableMultiStroke: true }))
     : [];
   return (
     <svg ref={ref} aria-hidden="true" viewBox={`-2 -4 ${w + 4} 8`} preserveAspectRatio="none" className={className} style={{ display: "block", width: "100%", height: 8, flexShrink: 0 }}>

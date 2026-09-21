@@ -1,7 +1,7 @@
 // Cliente da API para Server Components. A chave fica no servidor (env sem
 // NEXT_PUBLIC_), nunca chega ao navegador.
 import type {
-  AccountDto, CategoryDto, DailySummaryDto, GoalDetailDto, GoalProgressDto, HabitDto, HabitTodayDto,
+  AccountDto, CategoryDto, DailySummaryDto, EntryDto, GoalDetailDto, GoalProgressDto, HabitDto, HabitTodayDto,
   InstitutionDto, InvoiceDto, MediaItemDto, TransactionDto,
 } from "@indice/shared";
 
@@ -25,6 +25,7 @@ export const getAccounts = () => api<{ accounts: AccountDto[]; unassigned: numbe
 export const getCategories = () => api<{ categories: CategoryDto[] }>("/categories");
 export const getInstitutions = () => api<{ institutions: InstitutionDto[] }>("/institutions");
 export const getInvoices = () => api<{ invoices: InvoiceDto[] }>("/invoices");
+export const getEntriesRange = (from: string, to: string) => api<{ entries: EntryDto[] }>(`/entries?from=${from}&to=${to}`);
 export const getHabits = () => api<{ habits: HabitDto[] }>("/habits");
 export const getHabitsToday = (date?: string) => api<{ date: string; habits: HabitTodayDto[] }>(`/habits/today${date ? `?date=${date}` : ""}`);
 export const getGoals = () => api<{ goals: GoalProgressDto[] }>("/goals");

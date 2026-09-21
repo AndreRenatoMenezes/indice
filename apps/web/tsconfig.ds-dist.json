@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.design-sync.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "outDir": "dist",
+    "rootDir": ".",
+    "jsx": "react-jsx",
+    "incremental": false,
+    "plugins": []
+  },
+  "include": ["ds-shims/ds-entry.ts", "ds-shims/**/*.ts", "ds-shims/**/*.tsx", "components/**/*.ts", "components/**/*.tsx"]
+}

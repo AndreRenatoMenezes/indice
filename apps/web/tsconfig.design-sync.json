@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./*"],
+      "next/navigation": ["./ds-shims/next-navigation.ts"],
+      "next/link": ["./ds-shims/next-link.tsx"]
+    }
+  }
+}

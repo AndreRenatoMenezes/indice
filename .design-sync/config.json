@@ -1,0 +1,67 @@
+{
+  "projectId": "e97d8030-5ca1-4437-b7f5-1bad4374dbc4",
+  "shape": "package",
+  "pkg": "@indice/web",
+  "globalName": "Indice",
+  "srcDir": "components",
+  "tsconfig": "tsconfig.design-sync.json",
+  "cssEntry": ".ds-css/styles.built.css",
+  "extraFonts": [
+    "public/fonts/Excalifont.woff2"
+  ],
+  "buildCmd": "node apps/web/.ds-css/build-css.mjs && (cd apps/web && npx tsc -p tsconfig.ds-dist.json)",
+  "componentSrcMap": {
+    "Sketch": "components/sketch.tsx",
+    "SketchLine": "components/sketch.tsx",
+    "Frame": "components/ui.tsx",
+    "Card": "components/ui.tsx",
+    "Stat": "components/ui.tsx",
+    "Progress": "components/ui.tsx",
+    "Empty": "components/ui.tsx",
+    "Pill": "components/ui.tsx",
+    "Btn": "components/ui.tsx",
+    "Field": "components/ui.tsx",
+    "WeekDots": "components/ui.tsx",
+    "Nav": "components/Nav.tsx"
+  },
+  "overrides": {
+    "Nav": {
+      "cardMode": "single",
+      "primaryStory": "Cabecalho",
+      "viewport": "1040x180"
+    },
+    "Btn": {
+      "cardMode": "column"
+    },
+    "Card": {
+      "cardMode": "column"
+    },
+    "Empty": {
+      "cardMode": "column"
+    },
+    "Field": {
+      "cardMode": "column"
+    },
+    "Pill": {
+      "cardMode": "column"
+    },
+    "Progress": {
+      "cardMode": "column"
+    },
+    "Sketch": {
+      "cardMode": "column"
+    },
+    "SketchLine": {
+      "cardMode": "column"
+    },
+    "Stat": {
+      "cardMode": "column"
+    },
+    "WeekDots": {
+      "cardMode": "column"
+    },
+    "Frame": {
+      "cardMode": "column"
+    }
+  }
+}
