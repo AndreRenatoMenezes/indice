@@ -9,53 +9,108 @@
   font-display: swap;
 }
 
-/* Paleta dos artboards (`design/gen.cjs`): tinta sobre papel, sem tema escuro —
-   as molduras e os preenchimentos do rough.js pressupõem fundo claro. */
-:root {
-  --bg: #ffffff;
-  --fg: #1e1e1e;
-  --muted: #495057;
-  --line: #868e96;
-  --card: #ffffff;
-  --accent: #2f9e44;
-  --green: #2f9e44;
-  --yellow: #f08c00;
-  --red: #e03131;
+/* Serifada de display (EB Garamond): gera a classe `font-display` do Tailwind
+   v4. Só títulos e rótulos — conteúdo manuscrito continua na Excalifont. */
+@theme {
+  --font-display: var(--font-eb-garamond), Georgia, serif;
 }
-html { background: var(--bg); color: var(--fg); }
+
+/* Papel marfim e tinta quente: a paleta clínica de branco puro cedeu lugar ao
+   caderno. Sem tema escuro — as molduras do rough.js pressupõem fundo claro. */
+:root {
+  --bg: #fbf9f4;
+  --fg: #221f1c;
+  --muted: #6f665c;
+  --line: #a89e93;
+  --card: #fffdf8;
+  --accent: #3f6b3d;
+  --green: #3f6b3d;
+  --yellow: #b8860b;
+  --red: #b5453b;
+  /* Papel: linha de margem e pontilhado do fundo. */
+  --rule: #e3c4ba;
+  --grid: #ded5c4;
+  /* Tinta de apoio das páginas do caderno. */
+  --ink-soft: #8b8177;      /* rótulos e glifos secundários */
+  --ink-faint: #a0968b;     /* numeração, horários, riscado */
+  --rule-soft: #eae2d3;     /* régua entre linhas de lista */
+  --paper-raised: #f3f0e6;  /* o dia de hoje, no spread */
+}
+html {
+  background: var(--bg);
+  color: var(--fg);
+  /* Pontilhado do caderno, atrás de tudo. */
+  background-image: radial-gradient(var(--grid) 1px, transparent 1.1px);
+  background-size: 26px 26px;
+}
 body {
   font-family: "Excalifont", var(--font-kalam), "Segoe Print", cursive;
   font-size: 16px;
-  line-height: 1.3;
+  line-height: 1.45;
   -webkit-font-smoothing: antialiased;
 }
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  line-height: 1.08;
+  letter-spacing: -0.01em;
+  text-wrap: pretty;
+}
+a { color: var(--accent); }
+a:hover { color: #2c4d2b; }
+::selection { background: #e8e2d2; }
 .muted { color: var(--muted); }
 .mono { font-variant-numeric: tabular-nums; }
+
+/* Linha de margem vertical do caderno, a ~22px da coluna de conteúdo. */
+.paper { position: relative; }
+.paper::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 26px;
+  width: 1px;
+  background: var(--rule);
+  pointer-events: none;
+}
+
+/* Rótulo editorial: caixa alta espaçada em serifada, o que dá o ar de caderno
+   sem virar tipografia de formulário. */
+.label {
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  color: var(--muted);
+}
 
 /* Campos e botões não têm borda própria: a moldura é o <Sketch> atrás deles. */
 .input {
   border: 0;
   background: transparent;
-  padding: 2px 10px;
+  padding: 4px 12px;
   font: inherit;
   font-size: 15px;
   color: inherit;
   min-width: 0;
   outline: none;
 }
+.input::placeholder { color: #a0968b; }
 .btn {
   border: 0;
   background: transparent;
-  padding: 4px 14px;
+  padding: 5px 16px;
   font: inherit;
   font-size: 15px;
   color: inherit;
   cursor: pointer;
 }
 
-.dot { display: inline-block; width: 14px; height: 14px; border-radius: 999px; border: 1.5px solid var(--muted); }
-.dot-done { background: #b2f2bb; border-color: var(--green); }
+.dot { display: inline-block; width: 12px; height: 12px; border-radius: 999px; border: 1.1px solid var(--line); }
+.dot-done { background: #d6e6cf; border-color: var(--green); }
 .dot-miss { border-color: var(--red); }
-.dot-today { border-color: var(--fg); border-width: 2px; }
-.dot-off { border-style: dashed; opacity: 0.5; }
-.dot-future { opacity: 0.35; }
+.dot-today { border-color: var(--fg); border-width: 1.5px; }
+.dot-off { border-style: dashed; opacity: 0.45; }
+.dot-future { opacity: 0.3; }

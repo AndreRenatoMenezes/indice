@@ -28,3 +28,13 @@ apps/web/next-env.d.ts
 design/node_modules/
 design/excalidraw-libraries/
 design/test*.svg*
+
+# design-sync (claude.ai/design)
+.ds-sync/
+ds-bundle/
+.design-sync/.cache/
+.design-sync/learnings/
+.design-sync/node_modules
+apps/web/.ds-css/entry.css
+apps/web/.ds-css/styles.built.css
+apps/web/dist/
