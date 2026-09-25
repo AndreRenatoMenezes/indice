@@ -4,7 +4,7 @@
 
 | Feature | Domínio | Status |
 |---|---|---|
-| 001-lista-semanal | journal | 🟢 spec pronta, plano em rascunho |
+| 001-lista-semanal | journal | 🟡 implementada; 17 WPs aguardando o Review Agent |
 
 ## Próximas
 
