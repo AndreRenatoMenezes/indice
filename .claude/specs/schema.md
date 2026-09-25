@@ -80,7 +80,7 @@ erDiagram
         text rrule "RFC 5545"
         date startDate
         date endDate
-        json template "molde do bullet"
+        json template "molde + opções (ver regras)"
         bool active
         timestamptz deletedAt
     }
@@ -112,6 +112,7 @@ erDiagram
 - **Subtarefa é um bullet com `parentId`**, na mesma coleção e data do pai. Apagar o pai de verdade apaga as subtarefas (`ON DELETE CASCADE`); no uso normal o apagar é lógico (`deletedAt`).
 - **Migração (• → ›)** cria um bullet novo no dia-alvo, que aponta para a origem por `migratedFromId` (único: cada origem migra uma vez); a origem fica `MIGRATED`. Se a origem sumir, o vínculo vira nulo.
 - **Meta, mídia e regra de recorrência são vínculos opcionais**: apagar qualquer um deles deixa o bullet e só limpa o vínculo (`SET NULL`).
+- **Regra de recorrência nasce de um bullet aberto de um dia** (a primeira ocorrência) e não se edita: parar = `active = false` + `deletedAt`, e as ocorrências futuras abertas são apagadas. O `template` guarda o molde e as opções: `{ kind, text, description, time, alarm, priority, color, tags, goalId, mediaItemId, children: [{ kind, text }], options }`, com `options` no formato `RecurrenceInput` do `packages/shared` (a `rrule` é derivada delas). As ocorrências nascem na leitura de um dia ou intervalo, só de hoje em diante.
 - **Uma regra de recorrência materializa no máximo um bullet por data** (`RecurrenceInstance` com chave `ruleId + date`), mesmo com dois dispositivos abrindo o mesmo dia.
 - **Um registro de diário (humor, energia, reflexão) por dia** por usuário.
 - **Excluir o usuário apaga tudo dele** (`ON DELETE CASCADE` a partir de `User`).

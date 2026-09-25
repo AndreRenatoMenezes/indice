@@ -1,12 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { prisma, type Collection, type Entry, type Prisma } from "@indice/db";
+import { Prisma, prisma, type Collection, type Entry } from "@indice/db";
 import { CreateEntryInput, EntryBatchInput, MoveEntryInput, UpdateEntryInput, isoDate, type EntryDto } from "@indice/shared";
 import { parse, dateOrNull } from "../lib/http.js";
 import { daysBetween, fromISODate, todayISO } from "../lib/dates.js";
 import { config } from "../config.js";
 import { reposition, sortEntries } from "../modules/journal/ordering.js";
 import { canLeaveCollection, duplicateCopy, migrationCopy, moveKind } from "../modules/journal/moves.js";
+import { materializeRecurrences } from "./recurrence.js";
 
 // Teto do intervalo `?from&to`: cobre um mês com as semanas de borda.
 const MAX_RANGE_DAYS = 62;
@@ -23,13 +24,16 @@ export function toEntryDto(e: Entry, children?: Entry[]): EntryDto {
 
 // Garante a Collection DAILY de uma data (cria sob demanda, como o WeekToDo
 // criava a lista "YYYYMMDD" ao abrir o dia).
+// Em corrida (outra requisição criou o dia no meio do upsert: P2002), lê a que ficou.
 export async function ensureDailyCollection(userId: string, date: string) {
   const d = fromISODate(date);
-  return prisma.collection.upsert({
-    where: { userId_kind_date: { userId, kind: "DAILY", date: d } },
-    update: {},
-    create: { userId, kind: "DAILY", date: d, name: date },
-  });
+  const where = { userId_kind_date: { userId, kind: "DAILY" as const, date: d } };
+  try {
+    return await prisma.collection.upsert({ where, update: {}, create: { userId, kind: "DAILY", date: d, name: date } });
+  } catch (e) {
+    if (!(e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")) throw e;
+    return prisma.collection.findUniqueOrThrow({ where });
+  }
 }
 
 // Raízes (em ordem de data e, dentro do dia, pela regra 1B) com as subtarefas em `children`.
@@ -40,7 +44,9 @@ export function entryTree(rows: Entry[]): EntryDto[] {
   return roots.map((r) => toEntryDto(r, byParent.get(r.id) ?? []));
 }
 
+// Também atende o `/daily-summary` (Diário e Android): as repetições do dia nascem aqui.
 export async function listEntriesForDate(userId: string, date: string): Promise<{ collectionId: string | null; entries: EntryDto[] }> {
+  await materializeRecurrences(userId, date, date);
   const collection = await prisma.collection.findUnique({ where: { userId_kind_date: { userId, kind: "DAILY", date: fromISODate(date) } } });
   if (!collection) return { collectionId: null, entries: [] };
   const rows = await prisma.entry.findMany({ where: { collectionId: collection.id, deletedAt: null }, orderBy: { position: "asc" } });
@@ -48,6 +54,7 @@ export async function listEntriesForDate(userId: string, date: string): Promise<
 }
 
 export async function listEntriesInRange(userId: string, from: string, to: string): Promise<EntryDto[]> {
+  await materializeRecurrences(userId, from, to);
   const rows = await prisma.entry.findMany({
     where: { userId, deletedAt: null, date: { gte: fromISODate(from), lte: fromISODate(to) } },
     orderBy: [{ date: "asc" }, { position: "asc" }],

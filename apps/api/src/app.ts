@@ -7,6 +7,7 @@ import { config } from "./config.js";
 import { authPlugin } from "./plugins/auth.js";
 import { dailySummaryRoutes } from "./routes/daily-summary.js";
 import { entriesRoutes } from "./routes/entries.js";
+import { recurrenceRoutes } from "./routes/recurrence.js";
 import { habitsRoutes } from "./routes/habits.js";
 import { financeRoutes } from "./routes/finance.js";
 import { goalsRoutes } from "./routes/goals.js";
@@ -56,6 +57,7 @@ export async function buildApp() {
   await app.register(authPlugin);
   await app.register(dailySummaryRoutes);
   await app.register(entriesRoutes);
+  await app.register(recurrenceRoutes);
   await app.register(habitsRoutes);
   await app.register(financeRoutes);
   await app.register(goalsRoutes);

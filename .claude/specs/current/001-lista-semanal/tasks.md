@@ -136,7 +136,7 @@ depende_de: [WP01]
 ## WP06 — API: rotas de recorrência e materialização na leitura
 
 ```yaml
-lane: planejado
+lane: revisão
 estimativa: 90min
 files:
   - apps/api/src/routes/recurrence.ts
@@ -158,6 +158,8 @@ depende_de: [WP03, WP05]
 - [ ] `schema.md`: descrição do `template` atualizada; `atualizado_em` muda.
 
 ### Log
+- 2026-09-25: iniciada
+- 2026-09-25: concluída — routes/recurrence.ts (GET /recurrence-rules, PUT /entries/:id/recurrence, DELETE /recurrence-rules/:id, materializeRecurrences; não importa entries.ts) chamado por ?date (logo /daily-summary) e ?from&to. curl ok: segundas futuras com ↻ e subtarefas do molde, sem duplicar em GET repetido nem com 6 GETs simultâneos; apagada e migrada não voltam; parar tira as futuras abertas. Fora de files: 1 linha em modules/journal/recurrence.ts (interop CJS do rrule no Node ESM, que só o vitest mascarava); ensureDailyCollection agora aguenta P2002. schema.md: formato do template (atualizado_em já era 2026-09-25).
 
 ---
 

@@ -1,9 +1,13 @@
 // Portado de weektodo-journal (repeatingEventDateCache + helpers/repeatingEvents.js).
 // Expande RRULEs para um intervalo e diz quais regras devem materializar em cada data.
 // A garantia de "uma vez por data" mora na tabela RecurrenceInstance (PK ruleId+date).
-import { rrulestr } from "rrule";
+import * as rruleModule from "rrule";
 import type { RecurrenceInput } from "@indice/shared";
 import { fromISODate, isoWeekday, parts, toISODate } from "../../lib/dates.js";
+
+// O `rrule` publica um bundle CommonJS (UMD) sem `exports`: no Node em ESM os
+// nomes só vêm pelo `default`; o vitest faz a interop sozinho.
+const { rrulestr } = (rruleModule as unknown as { default?: typeof rruleModule }).default ?? rruleModule;
 
 export type RuleLike = { id: string; rrule: string; startDate: string; endDate: string | null; active: boolean };
 
