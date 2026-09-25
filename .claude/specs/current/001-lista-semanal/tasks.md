@@ -339,7 +339,7 @@ Gaveta com texto, tipo, hora, cor, prioridade, tags, meta, notas (markdown) e "m
 ## WP13 — Web: subtarefas no painel
 
 ```yaml
-lane: planejado
+lane: revisão
 estimativa: 60min
 files:
   - apps/web/components/week/EntryPanel.tsx
@@ -357,6 +357,8 @@ Criar (Enter), marcar, editar (duplo clique), reordenar (arrastar, `DndContext` 
 - [ ] Subtarefa concluída desce para o fim (ordem do servidor).
 
 ### Log
+- 2026-09-25: iniciada
+- 2026-09-25: concluída — SubtaskList (criar com Enter mantendo o foco, marcar, duplo clique edita, arrastar com DndContext próprio por mouse/toque/teclado, apagar com desfazer). createEntry com parentId; reordenar = moveEntry só com beforeId. Fora de files: WeekBoard.tsx (monta as ops e passa a lista ao painel) e NewEntryInput.tsx (placeholder; Esc com texto não fecha o painel); EntryRow e SubtaskList sem aria-disabled na linha. Playwright: x/y da linha acompanha na hora; concluída desce (ordem do servidor); reordenar persiste ao recarregar.
 
 ---
 

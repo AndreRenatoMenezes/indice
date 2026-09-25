@@ -61,7 +61,7 @@ export function InlineEdit({ value, onSave, onDone, className = "" }: { value: s
       onKeyDown={(e) => {
         e.stopPropagation();
         if (e.key === "Enter" && !e.nativeEvent.isComposing) finish(true);
-        else if (e.key === "Escape") finish(false);
+        else if (e.key === "Escape") { e.preventDefault(); finish(false); }
       }}
       onBlur={() => finish(true)}
       onClick={(e) => e.stopPropagation()}
@@ -126,6 +126,8 @@ export function EntryRow({ entry, place, ops, actions }: { entry: EntryDto; plac
       {...listeners}
       onKeyDown={onKeyDown}
       aria-roledescription="tarefa arrastável"
+      // A linha tem controles próprios (marcador, edição): "não arrasta" não é "desabilitada".
+      aria-disabled={undefined}
       style={{ transform: CSS.Translate.toString(transform), transition, opacity: isDragging ? 0.35 : undefined, WebkitTouchCallout: "none" }}
       className="-mx-1 rounded px-1 outline-none focus-visible:bg-[var(--paper-raised)] focus-visible:ring-1 focus-visible:ring-[var(--line)]"
     >

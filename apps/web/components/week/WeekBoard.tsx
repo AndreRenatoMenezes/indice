@@ -17,6 +17,7 @@ import { dayOfMonth, weekdayShort } from "@/lib/dates";
 import { Column } from "./Column";
 import { EntryPanel, placeLabel, type GoalOption, type PanelOps } from "./EntryPanel";
 import { EntryView, type RowOps } from "./EntryRow";
+import { SubtaskList, type SubtaskOps } from "./SubtaskList";
 import { Toast, type ToastData } from "./Toast";
 import {
   draftEntry, entryAsText, findEntry, isManual, parsePlaceKey, placeKey, rootsAt, samePlace, weekReducer,
@@ -174,6 +175,25 @@ export function WeekBoard({ today, days, initial, goals, habits, asideTop, aside
   };
   const opened = openId ? findEntry(state, openId) : null;
 
+  const sub: SubtaskOps = {
+    create: (parent, text) => {
+      const entry = draftEntry({ id: crypto.randomUUID(), text, parentId: parent.id, date: parent.date });
+      run({ type: "createChild", parentId: parent.id, entry }, () => createEntry({ id: entry.id, parentId: parent.id, text, kind: "TASK" }));
+    },
+    toggle: (c) => {
+      const status = c.status === "DONE" ? "OPEN" : "DONE";
+      run({ type: "update", ids: [c.id], patch: { status } }, () => updateEntry(c.id, { status }));
+    },
+    rename: (c, text) => run({ type: "update", ids: [c.id], patch: { text } }, () => updateEntry(c.id, { text })),
+    move: (parent, c, beforeId) => run({ type: "moveChild", parentId: parent.id, id: c.id, beforeId }, () => moveEntry(c.id, { beforeId })),
+    remove: (parent, c) =>
+      run({ type: "remove", ids: [c.id] }, () => batchEntries({ action: "delete", ids: [c.id] }), () =>
+        notify("Subtarefa apagada.", {
+          undo: () => run({ type: "createChild", parentId: parent.id, entry: c }, () => batchEntries({ action: "restore", ids: [c.id] })),
+        }),
+      ),
+  };
+
   const ops: RowOps = {
     toggle: (e: EntryDto) => {
       const status = e.status === "DONE" ? "OPEN" : "DONE";
@@ -239,6 +259,7 @@ export function WeekBoard({ today, days, initial, goals, habits, asideTop, aside
           lists={state.lists}
           goals={goals}
           ops={panel}
+          subtasks={<SubtaskList parent={opened.entry} ops={sub} />}
         />
       )}
 
