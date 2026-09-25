@@ -4,7 +4,6 @@
 
 | Feature | Domínio | Status |
 |---|---|---|
-| 001-lista-semanal | journal | 🟡 implementada; 17 WPs aguardando o Review Agent |
 
 ## Próximas
 
@@ -16,3 +15,4 @@
 
 | Feature | Domínio | Concluída em |
 |---|---|---|
+| 001-lista-semanal | journal | 2026-09-25 |

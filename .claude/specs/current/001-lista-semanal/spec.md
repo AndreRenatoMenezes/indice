@@ -29,21 +29,21 @@ A página Semana deixa de ser só leitura: crio, edito, concluo, repito e arrast
 
 ## Está pronto quando
 
-- [ ] Digito no pé da quarta e aperto Enter: a tarefa aparece e o campo fica pronto para a próxima.
-- [ ] Clico no marcador (•): a tarefa fica concluída. Clico de novo: reabre.
-- [ ] Arrasto de segunda para sexta: na segunda fica o rastro (›) e a tarefa aparece na sexta com notas e subtarefas abertas.
-- [ ] Arrasto uma tarefa sem hora para cima de outra no mesmo dia: a ordem fica ao recarregar. Tarefa com hora não sai do lugar dela.
-- [ ] Apago o rastro de uma tarefa, ou "limpo as migradas" da semana, e posso desfazer.
-- [ ] Troco de semana com ‹ ›, volto com "hoje" e salto para qualquer data num mini-calendário.
-- [ ] Clique no texto abre o painel; duplo clique edita ali mesmo (Enter salva, Esc desiste).
-- [ ] O painel tem: notas com formatação simples, subtarefas (criar, marcar, editar, reordenar, apagar), horário, cor, prioridade (*), tags, tipo (tarefa/evento/nota), meta vinculada, mudar de dia ou de lista, e repetição.
-- [ ] Na semana, cada tarefa mostra hora, cor, prioridade, contador de subtarefas (1/3), sinal de nota e sinal de repetição (↻).
-- [ ] Por tarefa: duplicar, copiar o texto e apagar com "desfazer". Por dia: concluir todas, adiar pendentes para amanhã, copiar a lista.
-- [ ] A lateral lista as pendentes de dias passados, com "migrar todas para hoje", e as tarefas repetidas, com "parar".
-- [ ] Crio, renomeio, reordeno e apago listas personalizadas; arrasto tarefas entre lista e dia, nos dois sentidos.
-- [ ] Marco "toda segunda" numa tarefa: ela aparece nas próximas segundas; "parar de repetir" tira as futuras.
-- [ ] No celular tudo funciona (arrastar com toque longo). Se uma gravação falhar, a tela volta ao estado anterior e aparece um aviso.
-- [ ] O que faço na Semana aparece igual no Diário e no app Android, inclusive as repetições do dia.
+- [x] Digito no pé da quarta e aperto Enter: a tarefa aparece e o campo fica pronto para a próxima.
+- [x] Clico no marcador (•): a tarefa fica concluída. Clico de novo: reabre.
+- [x] Arrasto de segunda para sexta: na segunda fica o rastro (›) e a tarefa aparece na sexta com notas e subtarefas abertas.
+- [x] Arrasto uma tarefa sem hora para cima de outra no mesmo dia: a ordem fica ao recarregar. Tarefa com hora não sai do lugar dela.
+- [x] Apago o rastro de uma tarefa, ou "limpo as migradas" da semana, e posso desfazer.
+- [x] Troco de semana com ‹ ›, volto com "hoje" e salto para qualquer data num mini-calendário.
+- [x] Clique no texto abre o painel; duplo clique edita ali mesmo (Enter salva, Esc desiste).
+- [x] O painel tem: notas com formatação simples, subtarefas (criar, marcar, editar, reordenar, apagar), horário, cor, prioridade (*), tags, tipo (tarefa/evento/nota), meta vinculada, mudar de dia ou de lista, e repetição.
+- [x] Na semana, cada tarefa mostra hora, cor, prioridade, contador de subtarefas (1/3), sinal de nota e sinal de repetição (↻).
+- [x] Por tarefa: duplicar, copiar o texto e apagar com "desfazer". Por dia: concluir todas, adiar pendentes para amanhã, copiar a lista.
+- [x] A lateral lista as pendentes de dias passados, com "migrar todas para hoje", e as tarefas repetidas, com "parar".
+- [x] Crio, renomeio, reordeno e apago listas personalizadas; arrasto tarefas entre lista e dia, nos dois sentidos.
+- [x] Marco "toda segunda" numa tarefa: ela aparece nas próximas segundas; "parar de repetir" tira as futuras.
+- [x] No celular tudo funciona (arrastar com toque longo). Se uma gravação falhar, a tela volta ao estado anterior e aparece um aviso.
+- [x] O que faço na Semana aparece igual no Diário e no app Android, inclusive as repetições do dia.
 
 ## Não entra agora
 
