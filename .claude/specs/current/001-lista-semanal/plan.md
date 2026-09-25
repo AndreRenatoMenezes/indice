@@ -45,7 +45,11 @@ recurrenceRuleId: z.string().nullable(),
 export const UpdateEntryInput = CreateEntryInput
   .omit({ id: true, date: true, collectionId: true, parentId: true, source: true })
   .partial()
-  .extend({ kind: EntryKind.optional(), status: EntryStatus.optional() }); // sem `position`
+  .extend({ kind: EntryKind.optional(), status: EntryStatus.optional(),
+    // emenda 2026-09-25 (WP08): `null` limpa — o painel precisa tirar hora, cor, notas e meta
+    description: z.string().nullable().optional(), time: hhmm.nullable().optional(),
+    color: z.string().nullable().optional(), goalId: z.string().nullable().optional(),
+    mediaItemId: z.string().nullable().optional() }); // sem `position`
 // `kind` redeclarado SEM default: no zod 4, `.partial()` mantém o `.default("TASK")`,
 // e hoje todo PATCH chega com kind=TASK — concluir um evento/nota o vira tarefa (bug atual).
 

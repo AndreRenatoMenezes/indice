@@ -56,11 +56,20 @@ export type CreateEntryInput = z.infer<typeof CreateEntryInput>;
 
 // Onde a entrada mora (data, lista, pai) só muda por `/move`; a ordem também.
 // `kind` é redeclarado sem default: no zod 4, `.partial()` mantém o
-// `.default("TASK")` e todo PATCH gravaria `kind: TASK`.
+// `.default("TASK")` e todo PATCH gravaria `kind: TASK`. `null` limpa os
+// campos opcionais (tirar a hora, a cor, as notas, a meta).
 export const UpdateEntryInput = CreateEntryInput
   .omit({ id: true, date: true, collectionId: true, parentId: true, source: true })
   .partial()
-  .extend({ kind: EntryKind.optional(), status: EntryStatus.optional() });
+  .extend({
+    kind: EntryKind.optional(),
+    status: EntryStatus.optional(),
+    description: z.string().nullable().optional(),
+    time: hhmm.nullable().optional(),
+    color: z.string().nullable().optional(),
+    goalId: z.string().nullable().optional(),
+    mediaItemId: z.string().nullable().optional(),
+  });
 export type UpdateEntryInput = z.infer<typeof UpdateEntryInput>;
 
 // Soltar numa data (dia) ou numa lista; sem nenhum dos dois, só reordena.
