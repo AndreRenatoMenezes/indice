@@ -5,13 +5,43 @@
 // chama a Server Action dentro de uma transição e, se ela falhar, o React
 // descarta o estado otimista (a tela volta) e o aviso aparece.
 import { useCallback, useOptimistic, useState, useTransition, type ReactNode } from "react";
+import {
+  DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor, closestCorners, pointerWithin, rectIntersection, useSensor, useSensors,
+  type Announcements, type CollisionDetection, type DragEndEvent, type DragOverEvent, type DragStartEvent,
+} from "@dnd-kit/core";
+import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import type { EntryDto } from "@indice/shared";
-import { createEntry, updateEntry } from "@/lib/actions";
+import { createEntry, moveEntry, updateEntry } from "@/lib/actions";
 import { dayOfMonth, weekdayShort } from "@/lib/dates";
 import { Column } from "./Column";
-import type { RowOps } from "./EntryRow";
+import { EntryView, type RowOps } from "./EntryRow";
 import { Toast, type ToastData } from "./Toast";
-import { draftEntry, weekReducer, type Place, type WeekAction, type WeekState } from "./weekState";
+import {
+  draftEntry, findEntry, isManual, parsePlaceKey, placeKey, rootsAt, samePlace, weekReducer, type Place, type WeekAction, type WeekState,
+} from "./weekState";
+
+// Com vários dias e listas, o ponteiro decide a coluna; dentro dela, a tarefa
+// mais próxima. Sem ponteiro (teclado), vale o retângulo arrastado.
+const collision: CollisionDetection = (args) => {
+  const hits = args.pointerCoordinates ? pointerWithin(args) : rectIntersection(args);
+  const item = hits.find((h) => !parsePlaceKey(String(h.id)));
+  if (item) return [item];
+  const column = hits[0];
+  if (!column) return closestCorners(args);
+  const inside = args.droppableContainers.filter((c) => c.data.current?.sortable?.containerId === column.id);
+  return inside.length ? closestCorners({ ...args, droppableContainers: inside }) : [column];
+};
+
+const announcements: Announcements = {
+  onDragStart: () => "Tarefa pega. Use as setas para mover e espaço para soltar; Esc cancela.",
+  onDragOver: ({ over }) => (over ? "Sobre outra posição." : "Fora de uma lista."),
+  onDragEnd: ({ over }) => (over ? "Tarefa solta." : "Tarefa solta fora de uma lista; nada mudou."),
+  onDragCancel: () => "Arrasto cancelado; nada mudou.",
+};
+
+// Parte vinda do servidor como filho único: elemento do RSC entre irmãos do
+// cliente dispara o aviso de `key` no React 19 em desenvolvimento.
+const Slot = ({ children }: { children: ReactNode }) => <div className="contents">{children}</div>;
 
 export type GoalOption = { id: string; title: string };
 
@@ -50,6 +80,60 @@ export function WeekBoard({ today, days, initial, habits, asideTop, asideBottom 
     });
   }, [apply, notify]);
 
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    // Toque longo arrasta; toque curto (ou deslizar) rola a página.
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates, keyboardCodes: { start: ["Space"], cancel: ["Escape"], end: ["Space", "Enter"] } }),
+  );
+  const [dragging, setDragging] = useState<EntryDto | null>(null);
+  const [overKey, setOverKey] = useState<string | null>(null);
+
+  /** Mover uma raiz (arrastar, "mudar de dia"): mesmo lugar reordena; sair de um dia deixa rastro. */
+  const move = (entry: EntryDto, from: Place, to: Place, beforeId: string | null) => {
+    if (samePlace(from, to)) {
+      if (!isManual(entry)) return notify("A hora define a ordem.");
+      return run({ type: "move", id: entry.id, to, beforeId, copyId: "" }, () => moveEntry(entry.id, { beforeId }));
+    }
+    run({ type: "move", id: entry.id, to, beforeId, copyId: crypto.randomUUID() }, () =>
+      moveEntry(entry.id, to.kind === "day" ? { date: to.date, beforeId } : { collectionId: to.id, beforeId }),
+    );
+  };
+
+  const placeOf = (id: string): Place | null => parsePlaceKey(id) ?? findEntry(state, id)?.place ?? null;
+
+  const onDragStart = ({ active }: DragStartEvent) => setDragging(findEntry(state, String(active.id))?.entry ?? null);
+  const onDragOver = ({ over }: DragOverEvent) => {
+    const p = over ? placeOf(String(over.id)) : null;
+    setOverKey(p ? placeKey(p) : null);
+  };
+  const onDragEnd = ({ active, over }: DragEndEvent) => {
+    setDragging(null);
+    setOverKey(null);
+    const found = findEntry(state, String(active.id));
+    if (!over || !found) return;
+    const { entry, place: from } = found;
+    const to = placeOf(String(over.id));
+    if (!to) return;
+    const list = rootsAt(state, to) ?? [];
+    const overIndex = list.findIndex((e) => e.id === over.id);
+    let beforeId: string | null = null;
+    if (overIndex >= 0) {
+      if (samePlace(from, to)) {
+        const activeIndex = list.findIndex((e) => e.id === entry.id);
+        if (activeIndex === overIndex) return; // soltou no mesmo lugar: nada a gravar
+        // Mesma semântica do arrayMove: descendo, fica depois do alvo.
+        beforeId = activeIndex < overIndex ? (list[overIndex + 1]?.id ?? null) : list[overIndex]!.id;
+      } else {
+        const dragged = active.rect.current.translated;
+        const below = !!dragged && dragged.top + dragged.height / 2 > over.rect.top + over.rect.height / 2;
+        beforeId = below ? (list[overIndex + 1]?.id ?? null) : list[overIndex]!.id;
+      }
+    }
+    move(entry, from, to, beforeId);
+  };
+  const onDragCancel = () => { setDragging(null); setOverKey(null); };
+
   const create = (place: Place, text: string) => {
     const entry = draftEntry({ id: crypto.randomUUID(), text, date: place.kind === "day" ? place.date : null });
     run({ type: "create", place, entry }, () =>
@@ -68,26 +152,49 @@ export function WeekBoard({ today, days, initial, habits, asideTop, asideBottom 
 
   return (
     <div className="mt-8 grid items-start gap-11 lg:grid-cols-[minmax(0,1fr)_minmax(0,260px)]">
-      <main className="flex min-w-0 flex-col gap-7">
-        <div className="grid grid-cols-2 gap-x-8 gap-y-6 sm:grid-cols-3 lg:grid-cols-4">
-          {days.map((d) => (
-            <Column
-              key={d}
-              title={`${weekdayShort(d)}${d === today ? " · hoje" : ""}`}
-              aside={<span className="mono font-display text-[13px] text-[var(--ink-faint)]">{dayOfMonth(d)}</span>}
-              highlight={d === today}
-              entries={state.days[d] ?? []}
-              ops={ops}
-              onCreate={(text) => create({ kind: "day", date: d }, text)}
-            />
-          ))}
-        </div>
-        {habits}
-      </main>
+      <DndContext
+        id="semana" // ids de acessibilidade estáveis entre o SSR e a hidratação
+        sensors={sensors}
+        collisionDetection={collision}
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDragEnd={onDragEnd}
+        onDragCancel={onDragCancel}
+        accessibility={{ announcements, screenReaderInstructions: { draggable: "Para arrastar, aperte espaço; as setas movem; espaço solta; Esc cancela." } }}
+      >
+        <main className="flex min-w-0 flex-col gap-7">
+          <div className="grid grid-cols-2 gap-x-8 gap-y-6 sm:grid-cols-3 lg:grid-cols-4">
+            {days.map((d) => {
+              const place: Place = { kind: "day", date: d };
+              return (
+                <Column
+                  key={d}
+                  place={place}
+                  title={`${weekdayShort(d)}${d === today ? " · hoje" : ""}`}
+                  aside={<span className="mono font-display text-[13px] text-[var(--ink-faint)]">{dayOfMonth(d)}</span>}
+                  highlight={d === today}
+                  dropping={overKey === placeKey(place)}
+                  entries={state.days[d] ?? []}
+                  ops={ops}
+                  onCreate={(text) => create(place, text)}
+                />
+              );
+            })}
+          </div>
+          <Slot>{habits}</Slot>
+        </main>
+        <DragOverlay dropAnimation={null}>
+          {dragging && (
+            <div className="rounded bg-[var(--card)] px-2 py-1 shadow-[0_2px_10px_rgba(34,31,28,0.18)]">
+              <EntryView entry={dragging} />
+            </div>
+          )}
+        </DragOverlay>
+      </DndContext>
 
       <aside className="flex min-w-0 flex-col gap-5">
-        {asideTop}
-        {asideBottom}
+        <Slot>{asideTop}</Slot>
+        <Slot>{asideBottom}</Slot>
       </aside>
 
       <Toast toast={toast} onClose={closeToast} />

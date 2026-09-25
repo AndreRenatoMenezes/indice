@@ -254,7 +254,7 @@ A página vira casca de servidor + `WeekBoard` otimista: criar no pé do dia, co
 ## WP10 — Web: arrastar e soltar entre dias e no mesmo dia
 
 ```yaml
-lane: planejado
+lane: revisão
 estimativa: 90min
 files:
   - apps/web/components/week/WeekBoard.tsx
@@ -275,6 +275,8 @@ depende_de: [WP09]
 - [ ] Viewport de celular (DevTools): toque longo arrasta; toque curto rola a página.
 
 ### Log
+- 2026-09-25: iniciada
+- 2026-09-25: concluída — DndContext (mouse com 5 px, toque 250 ms, teclado só com espaço) + colisão ponteiro→coluna→tarefa mais próxima; soltar calcula beforeId e chama moveEntry; otimista com rastro. Playwright: seg→sex deixa › e cópia 0/1 ¶ (antes e depois do revalidate); reordenar persiste ao recarregar; com hora volta + 'A hora define a ordem'; migrada não arrasta; teclado espaço/setas/espaço; toque longo arrasta e toque curto não. Correções de console: DndContext com id (hidratação) e slots do servidor como filho único (aviso de key). Largura no celular estoura em todas as páginas (Nav/layout, fora de escopo) → INBOX.
 
 ---
 

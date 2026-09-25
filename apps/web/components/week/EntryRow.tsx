@@ -2,10 +2,14 @@
 
 // Uma tarefa na semana: o bullet do caderno com o marcador clicável (concluir /
 // reabrir), clique que abre o painel, duplo clique que edita ali mesmo e os
-// selos (hora, cor, prioridade, subtarefas, nota, repetição).
-import { useEffect, useRef, useState, type ReactNode } from "react";
+// selos (hora, cor, prioridade, subtarefas, nota, repetição). A linha é
+// arrastável (mouse, toque longo, teclado) quando a tarefa é raiz e aberta.
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { EntryDto } from "@indice/shared";
 import { Bullet } from "../paper";
+import { canMove, type Place } from "./weekState";
 
 export type RowOps = {
   toggle: (e: EntryDto) => void;
@@ -61,42 +65,19 @@ export function InlineEdit({ value, onSave, onDone, className = "" }: { value: s
       }}
       onBlur={() => finish(true)}
       onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
       className={`input w-full border-b border-[var(--line)] px-0 ${className}`}
       aria-label="editar texto"
     />
   );
 }
 
-export function EntryRow({ entry, ops, actions }: { entry: EntryDto; ops: RowOps; actions?: ReactNode }) {
-  const [editing, setEditing] = useState(false);
-  const clickTimer = useRef<number | undefined>(undefined);
-  useEffect(() => () => window.clearTimeout(clickTimer.current), []);
-
-  const toggleable = entry.status === "OPEN" || entry.status === "DONE";
+/** Aparência da linha (também usada na "sombra" que acompanha o arrasto). */
+export function EntryView({ entry, ops, actions }: { entry: EntryDto; ops?: RowOps; actions?: ReactNode }) {
+  const toggleable = !!ops && (entry.status === "OPEN" || entry.status === "DONE");
   const migrated = entry.status === "MIGRATED";
-
-  if (editing) {
-    return (
-      <div className="flex items-baseline gap-[11px]">
-        <span className="w-3.5 flex-none text-sm">{glyph(entry)}</span>
-        <InlineEdit value={entry.text} onSave={(t) => ops.rename(entry, t)} onDone={() => setEditing(false)} className="text-base" />
-      </div>
-    );
-  }
-
   return (
-    <div
-      className={`cursor-pointer select-none ${migrated ? "[&_span.flex-1]:text-[var(--ink-faint)] [&_span.flex-1]:line-through" : ""}`}
-      onClick={() => {
-        // Clique abre o painel, a menos que venha o segundo clique (edição).
-        window.clearTimeout(clickTimer.current);
-        clickTimer.current = window.setTimeout(() => ops.open(entry.id), 250);
-      }}
-      onDoubleClick={() => {
-        window.clearTimeout(clickTimer.current);
-        setEditing(true);
-      }}
-    >
+    <div className={migrated ? "[&_span.flex-1]:text-[var(--ink-faint)] [&_span.flex-1]:line-through" : ""}>
       <Bullet
         entry={entry}
         size="sm"
@@ -106,7 +87,7 @@ export function EntryRow({ entry, ops, actions }: { entry: EntryDto; ops: RowOps
             className={toggleable ? "cursor-pointer" : "cursor-default"}
             disabled={!toggleable}
             title={entry.status === "DONE" ? "reabrir" : toggleable ? "concluir" : migrated ? "migrada" : undefined}
-            onClick={(e) => { e.stopPropagation(); ops.toggle(entry); }}
+            onClick={(e) => { e.stopPropagation(); ops?.toggle(entry); }}
             onDoubleClick={(e) => e.stopPropagation()}
           >
             {glyph(entry)}
@@ -117,5 +98,58 @@ export function EntryRow({ entry, ops, actions }: { entry: EntryDto; ops: RowOps
         {actions}
       </Bullet>
     </div>
+  );
+}
+
+export function EntryRow({ entry, place, ops, actions }: { entry: EntryDto; place: Place; ops: RowOps; actions?: ReactNode }) {
+  const [editing, setEditing] = useState(false);
+  const clickTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(clickTimer.current), []);
+
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: entry.id,
+    data: { place },
+    // Só raiz aberta sai do lugar; as demais continuam alvo (soltar antes delas).
+    disabled: { draggable: !canMove(entry) || editing, droppable: false },
+  });
+
+  const onKeyDown = (e: KeyboardEvent<HTMLLIElement>) => {
+    listeners?.onKeyDown?.(e);
+    if (e.defaultPrevented || isDragging || e.target !== e.currentTarget) return;
+    if (e.key === "Enter") ops.open(entry.id);
+  };
+
+  return (
+    <li
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      onKeyDown={onKeyDown}
+      aria-roledescription="tarefa arrastável"
+      style={{ transform: CSS.Translate.toString(transform), transition, opacity: isDragging ? 0.35 : undefined, WebkitTouchCallout: "none" }}
+      className="-mx-1 rounded px-1 outline-none focus-visible:bg-[var(--paper-raised)] focus-visible:ring-1 focus-visible:ring-[var(--line)]"
+    >
+      {editing ? (
+        <div className="flex items-baseline gap-[11px]">
+          <span className="w-3.5 flex-none text-sm">{glyph(entry)}</span>
+          <InlineEdit value={entry.text} onSave={(t) => ops.rename(entry, t)} onDone={() => setEditing(false)} className="text-base" />
+        </div>
+      ) : (
+        <div
+          className="cursor-pointer select-none"
+          onClick={() => {
+            // Clique abre o painel, a menos que venha o segundo clique (edição).
+            window.clearTimeout(clickTimer.current);
+            clickTimer.current = window.setTimeout(() => ops.open(entry.id), 250);
+          }}
+          onDoubleClick={() => {
+            window.clearTimeout(clickTimer.current);
+            setEditing(true);
+          }}
+        >
+          <EntryView entry={entry} ops={ops} actions={actions} />
+        </div>
+      )}
+    </li>
   );
 }

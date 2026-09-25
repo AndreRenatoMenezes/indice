@@ -65,7 +65,7 @@ export default async function Semana({ searchParams }: { searchParams: Promise<{
         initial={{ days: byDay, lists, rules }}
         goals={goals.map((g) => ({ id: g.id, title: g.title }))}
         habits={
-          <>
+          <div className="flex flex-col gap-7">
             <SketchLine stroke="var(--ink-soft)" />
             <section>
               <SectionLabel className="mb-4">Hábitos</SectionLabel>
@@ -79,10 +79,10 @@ export default async function Semana({ searchParams }: { searchParams: Promise<{
                 {!viewed.habits.length && <Empty>Nenhum hábito. Crie em Hábitos.</Empty>}
               </div>
             </section>
-          </>
+          </div>
         }
         asideTop={
-          <>
+          <div className="flex flex-col gap-5">
             <Stat label="Sequência" value={`${streak} ${streak === 1 ? "dia" : "dias"}`} />
 
             {goals.length > 0 && (
@@ -106,7 +106,7 @@ export default async function Semana({ searchParams }: { searchParams: Promise<{
                 </div>
               </Card>
             )}
-          </>
+          </div>
         }
         asideBottom={
           <div>
