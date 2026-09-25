@@ -283,7 +283,7 @@ depende_de: [WP09]
 ## WP11 — Web: hoje e mini-calendário
 
 ```yaml
-lane: planejado
+lane: revisão
 estimativa: 45min
 files:
   - apps/web/app/semana/page.tsx
@@ -301,6 +301,8 @@ depende_de: [WP08]
 - [ ] Fecha com Esc e com clique fora; utilizável no celular.
 
 ### Log
+- 2026-09-25: iniciada
+- 2026-09-25: concluída — WeekNav no PageHead (‹ hoje › + ▦) e MiniCalendar em popover (monthGrid; semana vista destacada; hoje vem da prop, da API). Playwright: ‹ › mantêm o comportamento, hoje → /semana sem date, calendário abre no mês visto, navega meses, marca 24/09 só em setembro, Esc e clique fora fecham, clicar 03/12 vai à semana 49; no celular o popover cabe na tela.
 
 ---
 

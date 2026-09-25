@@ -1,10 +1,10 @@
-import Link from "next/link";
 import type { EntryDto } from "@indice/shared";
 import { getEntriesRange, getGoals, getHabitsToday, getLists, getRecurrenceRules, dateBR } from "@/lib/api";
 import { addDays, dayOfMonth, isoWeek, monthName, weekOf } from "@/lib/dates";
 import { Card, Empty, Pill, Progress, SketchLine, Stat, WeekDots } from "@/components/ui";
 import { PageHead, SectionLabel } from "@/components/paper";
 import { WeekBoard } from "@/components/week/WeekBoard";
+import { WeekNav } from "@/components/week/WeekNav";
 
 export const dynamic = "force-dynamic";
 
@@ -53,10 +53,7 @@ export default async function Semana({ searchParams }: { searchParams: Promise<{
         meta={`${dayOfMonth(from)} — ${dayOfMonth(to)} de ${monthName(to)}`}
         sub={`${done} de ${entries.length} concluídas`}
       >
-        <nav aria-label="Semana" className="flex gap-2 pb-1 text-[19px]">
-          <Link href={`/semana?date=${addDays(viewed.date, -7)}`} title="semana anterior">‹</Link>
-          <Link href={`/semana?date=${addDays(viewed.date, 7)}`} title="próxima semana">›</Link>
-        </nav>
+        <WeekNav viewed={viewed.date} today={today} />
       </PageHead>
 
       <WeekBoard
