@@ -110,7 +110,7 @@ depende_de: [WP03]
 ## WP05 — Regras puras: recorrência
 
 ```yaml
-lane: planejado
+lane: revisão
 estimativa: 75min
 files:
   - apps/api/src/modules/journal/recurrence.ts
@@ -128,6 +128,8 @@ depende_de: [WP01]
 - [ ] `plannedOccurrences` pula pares já existentes e nada antes de `from`.
 
 ### Log
+- 2026-09-25: iniciada
+- 2026-09-25: concluída — recurrence.ts ganha buildRRule, ruleEndDate, describeRule (pt-BR, sufixos de fim) e plannedOccurrences; occurrencesBetween/rulesDueOn intocados no comportamento. 16 testes (cada freq, intervalo, dia 31, COUNT/UNTIL, pares existentes, from).
 
 ---
 
