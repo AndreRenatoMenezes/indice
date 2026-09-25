@@ -10,14 +10,17 @@ import {
   type Announcements, type CollisionDetection, type DragEndEvent, type DragOverEvent, type DragStartEvent,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-import type { EntryDto } from "@indice/shared";
-import { createEntry, moveEntry, updateEntry } from "@/lib/actions";
+import type { EntryDto, UpdateEntryInput } from "@indice/shared";
+import { batchEntries, createEntry, duplicateEntry, moveEntry, updateEntry } from "@/lib/actions";
+import { dateBR } from "@/lib/api";
 import { dayOfMonth, weekdayShort } from "@/lib/dates";
 import { Column } from "./Column";
+import { EntryPanel, placeLabel, type GoalOption, type PanelOps } from "./EntryPanel";
 import { EntryView, type RowOps } from "./EntryRow";
 import { Toast, type ToastData } from "./Toast";
 import {
-  draftEntry, findEntry, isManual, parsePlaceKey, placeKey, rootsAt, samePlace, weekReducer, type Place, type WeekAction, type WeekState,
+  draftEntry, entryAsText, findEntry, isManual, parsePlaceKey, placeKey, rootsAt, samePlace, weekReducer,
+  type Place, type WeekAction, type WeekState,
 } from "./weekState";
 
 // Com vários dias e listas, o ponteiro decide a coluna; dentro dela, a tarefa
@@ -43,9 +46,7 @@ const announcements: Announcements = {
 // cliente dispara o aviso de `key` no React 19 em desenvolvimento.
 const Slot = ({ children }: { children: ReactNode }) => <div className="contents">{children}</div>;
 
-export type GoalOption = { id: string; title: string };
-
-export function WeekBoard({ today, days, initial, habits, asideTop, asideBottom }: {
+export function WeekBoard({ today, days, initial, goals, habits, asideTop, asideBottom }: {
   /** "Hoje" no fuso da API. */
   today: string;
   /** Segunda a domingo da semana vista. */
@@ -60,7 +61,7 @@ export function WeekBoard({ today, days, initial, habits, asideTop, asideBottom 
   const [state, apply] = useOptimistic(initial, weekReducer);
   const [, startTransition] = useTransition();
   const [toast, setToast] = useState<ToastData | null>(null);
-  const [, setOpenId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const notify = useCallback((message: string, extra: Omit<ToastData, "id" | "message"> = {}) => {
     setToast({ id: Date.now(), message, ...extra });
@@ -141,6 +142,38 @@ export function WeekBoard({ today, days, initial, habits, asideTop, asideBottom 
     );
   };
 
+  const panel: PanelOps = {
+    update: (e, patch: UpdateEntryInput) => run({ type: "update", ids: [e.id], patch: patch as Partial<EntryDto> }, () => updateEntry(e.id, patch)),
+    moveTo: (e, from, to) => {
+      move(e, from, to, null);
+      // Sair de um dia deixa só o rastro aqui: o painel fecha. Sair de uma lista leva a própria tarefa.
+      if (from.kind === "day") setOpenId(null);
+      if (to.kind === "day" && !state.days[to.date]) notify(`Foi para ${dateBR(to.date)}, fora desta semana.`);
+      else if (from.kind === "day") notify(`Foi para ${placeLabel(to, state.lists)}.`);
+    },
+    duplicate: (e, place) => {
+      const id = crypto.randomUUID();
+      const copy: EntryDto = {
+        ...e, id, status: "OPEN", recurrenceRuleId: null, position: Number.MAX_SAFE_INTEGER,
+        children: e.children?.map((c) => ({ ...c, id: `${id}:${c.id}`, parentId: id, status: "OPEN" })),
+      };
+      run({ type: "create", place, entry: copy }, () => duplicateEntry(e.id), () => notify("Duplicada."));
+    },
+    copy: (e) => {
+      navigator.clipboard.writeText(entryAsText(e)).then(() => notify("Texto copiado."), () => notify("Não deu para copiar.", { tone: "error" }));
+    },
+    remove: (e, place) => {
+      setOpenId(null);
+      run({ type: "remove", ids: [e.id] }, () => batchEntries({ action: "delete", ids: [e.id] }), () =>
+        notify("Tarefa apagada.", {
+          undo: () => run({ type: "create", place, entry: e }, () => batchEntries({ action: "restore", ids: [e.id] })),
+        }),
+      );
+    },
+    close: () => setOpenId(null),
+  };
+  const opened = openId ? findEntry(state, openId) : null;
+
   const ops: RowOps = {
     toggle: (e: EntryDto) => {
       const status = e.status === "DONE" ? "OPEN" : "DONE";
@@ -196,6 +229,18 @@ export function WeekBoard({ today, days, initial, habits, asideTop, asideBottom 
         <Slot>{asideTop}</Slot>
         <Slot>{asideBottom}</Slot>
       </aside>
+
+      {opened && !opened.parent && (
+        <EntryPanel
+          key={opened.entry.id}
+          entry={opened.entry}
+          place={opened.place}
+          days={days}
+          lists={state.lists}
+          goals={goals}
+          ops={panel}
+        />
+      )}
 
       <Toast toast={toast} onClose={closeToast} />
     </div>

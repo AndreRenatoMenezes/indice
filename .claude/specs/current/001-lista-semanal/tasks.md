@@ -309,7 +309,7 @@ depende_de: [WP08]
 ## WP12 — Web: painel de detalhes
 
 ```yaml
-lane: planejado
+lane: revisão
 estimativa: 90min
 files:
   - apps/web/components/week/WeekBoard.tsx
@@ -331,6 +331,8 @@ Gaveta com texto, tipo, hora, cor, prioridade, tags, meta, notas (markdown) e "m
 - [ ] Largura ≥ md: gaveta de 420 px à direita com a semana visível; abaixo: tela cheia; Esc fecha.
 
 ### Log
+- 2026-09-25: iniciada
+- 2026-09-25: concluída — EntryPanel (gaveta 420 px ≥ md, tela cheia abaixo; Esc e × fecham) com texto, tipo, hora (e 'sem hora'), cor, prioridade, tags, meta, notas (Notes: react-markdown sem HTML cru), mover para (dias da semana, listas ou outra data), duplicar, copiar (checklist) e apagar com desfazer (batch delete/restore). Usa a emenda do contrato (null limpa). Playwright: cada campo reflete na linha na hora e após gravar; <script> vira texto e não executa; mover terça→sexta deixa › e fecha o painel.
 
 ---
 
