@@ -26,15 +26,14 @@ Publicar todos os contratos da seção "Contratos" do plano e reduzir o `UpdateE
 
 ### Log
 - 2026-09-25: iniciada
-
----
 - 2026-09-25: concluída — contratos novos no shared; EntryDto/Dto.kt com recurrenceRuleId; PATCH sem position e sem default de kind (EVENT concluído segue EVENT, verificado por curl). assembleDebug não roda aqui (SDK do Android bloqueado pela rede): fica para o job android do CI.
 
+---
 
 ## WP02 — Regras puras: ordem e movimento
 
 ```yaml
-lane: planejado
+lane: revisão
 estimativa: 60min
 files:
   - apps/api/src/modules/journal/ordering.ts
@@ -53,6 +52,8 @@ depende_de: []
 - [ ] Testes de `moves`: 3 casos de `moveKind`; `canLeaveCollection` falso para fechada e para subtarefa; `migrationCopy` leva só subtarefas `OPEN`, seta `migratedFromId` e não leva regra; `duplicateCopy` reabre todas as subtarefas.
 
 ### Log
+- 2026-09-25: iniciada
+- 2026-09-25: concluída — ordering.ts (isClosed, isManual, reposition; sortEntries intocado e travado por teste) e moves.ts (moveKind, canLeaveCollection, migrationCopy, duplicateCopy); 19 testes vitest.
 
 ---
 
