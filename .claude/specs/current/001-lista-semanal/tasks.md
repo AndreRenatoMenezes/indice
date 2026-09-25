@@ -456,7 +456,7 @@ No painel, escolher repetição com as opções do WeekToDo (não repete, todo d
 ## WP17 — Aceite ponta a ponta e acabamento no celular
 
 ```yaml
-lane: planejado
+lane: revisão
 estimativa: 60min
 files:
   - apps/web/components/week/**
@@ -472,3 +472,5 @@ Rodar todos os itens de "Está pronto quando" da spec em desktop e em viewport d
 - [ ] Para um dia com tarefa migrada e uma repetida, o Diário e `GET /daily-summary` (fonte do app Android) mostram o mesmo que a Semana.
 
 ### Log
+- 2026-09-25: iniciada
+- 2026-09-25: concluída — 15/15 critérios de 'Está pronto quando' verificados com Playwright/Chromium (desktop 1280 e Pixel 7), banco local zerado antes; #15: /daily-summary, Diário e Semana mostram as mesmas entradas na mesma ordem num dia com migrada e repetida. Capturas em capturas/semana-desktop.png, semana-painel.png, celular-semana.png e celular-painel.png. Correções de interface: selos quebram linha na coluna estreita (e o ponto de cor não some), nome do dia não quebra no meio, '‹ voltar à semana' no painel do celular. Fora de components/week (→ INBOX, não bloqueiam os critérios): a página estoura a largura no celular (Nav/layout) e o Diário mostra migrada com •.

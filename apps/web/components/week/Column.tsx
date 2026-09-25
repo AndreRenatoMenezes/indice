@@ -35,9 +35,10 @@ export function Column({ place, title, aside, highlight, dropping, entries, ops,
       {highlight && <Sketch radius={12} fill="var(--paper-raised)" stroke="var(--line)" />}
       {dropping && <Sketch radius={12} stroke="var(--accent)" dash />}
       <div className="relative">
-        <div className="mb-3 flex items-baseline justify-between gap-1.5 border-b border-[var(--rule-soft)] pb-1.5">
-          {titleSlot ?? <span className="label min-w-0 break-words tracking-[0.14em]">{title}</span>}
-          <span className="flex flex-none items-baseline gap-1">
+        {/* Sem espaço, a data e o menu descem de linha; o nome do dia não quebra no meio. */}
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-1.5 border-b border-[var(--rule-soft)] pb-1.5">
+          {titleSlot ?? <span className="label break-words tracking-[0.14em]">{title}</span>}
+          <span className="ml-auto flex flex-none items-baseline gap-1">
             {aside}
             {menu}
           </span>

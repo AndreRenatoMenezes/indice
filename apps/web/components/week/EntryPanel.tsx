@@ -122,6 +122,8 @@ export function EntryPanel({ entry, place, days, lists, goals, ops, subtasks, re
       aria-label="detalhes da tarefa"
       className="fixed inset-0 z-40 overflow-y-auto bg-[var(--card)] px-6 pb-10 pt-5 outline-none md:inset-y-0 md:left-auto md:right-0 md:w-[420px] md:border-l md:border-[var(--line)] md:shadow-[-6px_0_24px_rgba(34,31,28,0.08)]"
     >
+      {/* No celular o "×" pode ficar fora da área visível (e não há Esc): voltar fica à esquerda. */}
+      <button type="button" onClick={ops.close} className="mb-3 cursor-pointer text-[15px] text-[var(--accent)] md:hidden">‹ voltar à semana</button>
       <div className="mb-4 flex items-baseline justify-between gap-3">
         <span className="label">{placeLabel(place, lists)}{entry.status === "MIGRATED" ? " · migrada" : entry.status === "DONE" ? " · concluída" : ""}</span>
         <button type="button" onClick={ops.close} aria-label="fechar painel" className="cursor-pointer text-[22px] leading-none text-[var(--ink-soft)]">×</button>

@@ -29,9 +29,11 @@ export function glyph(e: Pick<EntryDto, "kind" | "status">): string {
 export function Badges({ entry }: { entry: EntryDto }) {
   const kids = entry.children ?? [];
   const done = kids.filter((c) => c.status === "DONE").length;
+  if (!entry.color && !entry.priority && !kids.length && !entry.description && !entry.recurrenceRuleId) return null;
+  // Em coluna estreita os selos quebram linha no canto deles, sem espremer nem estourar o texto.
   return (
-    <span className="flex flex-none items-baseline gap-1.5 text-xs text-[var(--ink-soft)]">
-      {entry.color && <span role="img" aria-label="cor" className="inline-block h-2 w-2 self-center rounded-full" style={{ background: entry.color }} />}
+    <span className="flex min-w-0 max-w-[45%] flex-wrap items-baseline justify-end gap-x-1.5 text-xs text-[var(--ink-soft)]">
+      {entry.color && <span role="img" aria-label="cor" className="inline-block h-2 w-2 flex-none self-center rounded-full" style={{ background: entry.color }} />}
       {entry.priority > 0 && <span title={`prioridade ${entry.priority}`} className="text-[var(--red)]">{"*".repeat(entry.priority)}</span>}
       {kids.length > 0 && <span className="mono" title="subtarefas concluídas">{done}/{kids.length}</span>}
       {entry.description && <span title="tem nota">¶</span>}

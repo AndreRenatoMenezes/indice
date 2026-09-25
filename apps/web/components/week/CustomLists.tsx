@@ -30,7 +30,7 @@ export function CustomLists({ lists, onCreateList, onRename, renderList }: {
                 <InlineEdit value={l.name} onSave={(n) => onRename(l, n.slice(0, 60))} onDone={() => setRenaming(null)} className="label text-[11px]" />
               ) : (
                 <span
-                  className="label min-w-0 cursor-text break-words tracking-[0.14em]"
+                  className="label cursor-text break-words tracking-[0.14em]"
                   onDoubleClick={() => setRenaming(l.id)}
                   title="duplo clique para renomear"
                 >
