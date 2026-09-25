@@ -1,6 +1,6 @@
 ---
 feature: 001-lista-semanal
-status: rascunho   # rascunho | aprovado
+status: aprovado   # rascunho | aprovado
 baseado_em_spec_de: 2026-09-25
 ---
 

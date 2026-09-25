@@ -28,6 +28,7 @@ const EntryBase = z.object({
   position: z.number().int(),
   goalId: z.string().nullable(),
   mediaItemId: z.string().nullable(),
+  recurrenceRuleId: z.string().nullable(),
 });
 export type EntryDto = z.infer<typeof EntryBase> & { children?: EntryDto[] };
 export const EntryDto: z.ZodType<EntryDto> = EntryBase.extend({
@@ -53,11 +54,72 @@ export const CreateEntryInput = z.object({
 });
 export type CreateEntryInput = z.infer<typeof CreateEntryInput>;
 
-export const UpdateEntryInput = CreateEntryInput.partial().extend({
-  status: EntryStatus.optional(),
-  position: z.number().int().optional(),
-});
+// Onde a entrada mora (data, lista, pai) só muda por `/move`; a ordem também.
+// `kind` é redeclarado sem default: no zod 4, `.partial()` mantém o
+// `.default("TASK")` e todo PATCH gravaria `kind: TASK`.
+export const UpdateEntryInput = CreateEntryInput
+  .omit({ id: true, date: true, collectionId: true, parentId: true, source: true })
+  .partial()
+  .extend({ kind: EntryKind.optional(), status: EntryStatus.optional() });
 export type UpdateEntryInput = z.infer<typeof UpdateEntryInput>;
+
+// Soltar numa data (dia) ou numa lista; sem nenhum dos dois, só reordena.
+// `beforeId` ausente ou null = fim das manuais (sem hora e abertas).
+export const MoveEntryInput = z.object({
+  date: isoDate.optional(),
+  collectionId: z.string().optional(),
+  beforeId: z.string().nullable().optional(),
+}).refine((v) => !(v.date && v.collectionId), { message: "date ou collectionId, não os dois" });
+export type MoveEntryInput = z.infer<typeof MoveEntryInput>;
+
+const Ids = z.array(z.string()).min(1).max(200);
+export const EntryBatchInput = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("complete"), ids: Ids }),
+  z.object({ action: z.literal("migrate"), ids: Ids, date: isoDate }),
+  z.object({ action: z.literal("delete"), ids: Ids }),
+  z.object({ action: z.literal("restore"), ids: Ids }),
+]);
+export type EntryBatchInput = z.infer<typeof EntryBatchInput>;
+
+// Opções de repetição no formato do WeekToDo; a RRULE é derivada delas.
+export const RecurrenceInput = z.object({
+  freq: z.enum(["DAILY", "WEEKLY", "WEEKDAYS", "MONTHLY", "YEARLY"]),
+  interval: z.number().int().min(1).max(99).default(1),
+  weekdays: z.array(z.number().int().min(1).max(7)).optional(), // WEEKLY; vazio = dia da tarefa (1 = seg)
+  monthDays: z.array(z.number().int().min(1).max(31)).optional(), // MONTHLY; vazio = dia da tarefa
+  end: z.discriminatedUnion("type", [
+    z.object({ type: z.literal("never") }),
+    z.object({ type: z.literal("count"), count: z.number().int().min(1).max(999) }),
+    z.object({ type: z.literal("until"), date: isoDate }),
+  ]).default({ type: "never" }),
+});
+export type RecurrenceInput = z.infer<typeof RecurrenceInput>;
+
+export const RecurrenceRuleDto = z.object({
+  id: z.string(),
+  text: z.string(),
+  summary: z.string(), // "toda segunda · até 31/12/2026"
+  startDate: isoDate,
+  endDate: isoDate.nullable(),
+  options: RecurrenceInput,
+});
+export type RecurrenceRuleDto = z.infer<typeof RecurrenceRuleDto>;
+
+export const CustomListDto = z.object({
+  id: z.string(),
+  name: z.string(),
+  color: z.string().nullable(),
+  sortOrder: z.number().int(),
+  entries: z.array(EntryDto),
+});
+export type CustomListDto = z.infer<typeof CustomListDto>;
+
+export const CreateListInput = z.object({ name: z.string().trim().min(1).max(60), color: z.string().optional() });
+export type CreateListInput = z.infer<typeof CreateListInput>;
+export const UpdateListInput = CreateListInput.partial();
+export type UpdateListInput = z.infer<typeof UpdateListInput>;
+export const ReorderListsInput = z.object({ ids: z.array(z.string()).min(1) });
+export type ReorderListsInput = z.infer<typeof ReorderListsInput>;
 
 // ── Hábitos ────────────────────────────────────────────────────────────────
 export const HabitKind = z.enum(["BOOLEAN", "COUNTER", "DURATION", "TIME"]);

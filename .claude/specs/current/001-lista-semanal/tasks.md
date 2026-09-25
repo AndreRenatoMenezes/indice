@@ -6,7 +6,7 @@
 ## WP01 — Contratos compartilhados e espelho no Android
 
 ```yaml
-lane: planejado
+lane: revisão
 estimativa: 45min
 files:
   - packages/shared/src/index.ts
@@ -25,8 +25,11 @@ Publicar todos os contratos da seção "Contratos" do plano e reduzir o `UpdateE
 - [ ] Bug corrigido: `PATCH {"status":"DONE"}` num `EVENT` mantém `kind: "EVENT"` (antes virava `TASK` pelo default do zod).
 
 ### Log
+- 2026-09-25: iniciada
 
 ---
+- 2026-09-25: concluída — contratos novos no shared; EntryDto/Dto.kt com recurrenceRuleId; PATCH sem position e sem default de kind (EVENT concluído segue EVENT, verificado por curl). assembleDebug não roda aqui (SDK do Android bloqueado pela rede): fica para o job android do CI.
+
 
 ## WP02 — Regras puras: ordem e movimento
 

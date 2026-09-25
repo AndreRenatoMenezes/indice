@@ -12,6 +12,7 @@ export function toEntryDto(e: Entry, children?: Entry[]): EntryDto {
     id: e.id, collectionId: e.collectionId, parentId: e.parentId, kind: e.kind, status: e.status,
     text: e.text, description: e.description, date: dateOrNull(e.date), time: e.time, alarm: e.alarm,
     priority: e.priority, color: e.color, tags: e.tags, position: e.position, goalId: e.goalId, mediaItemId: e.mediaItemId,
+    recurrenceRuleId: e.recurrenceRuleId,
     children: children ? sortEntries(children).map((c) => toEntryDto(c)) : undefined,
   };
 }
@@ -99,7 +100,7 @@ export async function entriesRoutes(app: FastifyInstance) {
     const existing = await prisma.entry.findFirst({ where: { id, userId: req.userId, deletedAt: null } });
     if (!existing) return reply.code(404).send({ error: "not found" });
     const data: Prisma.EntryUpdateInput = {};
-    for (const k of ["text", "description", "time", "alarm", "priority", "color", "tags", "kind", "status", "position"] as const) {
+    for (const k of ["text", "description", "time", "alarm", "priority", "color", "tags", "kind", "status"] as const) {
       if (body[k] !== undefined) (data as Record<string, unknown>)[k] = body[k];
     }
     if (body.goalId !== undefined) data.goal = body.goalId ? { connect: { id: body.goalId } } : { disconnect: true };

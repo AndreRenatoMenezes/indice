@@ -22,6 +22,7 @@ data class EntryDto(
     val position: Int = 0,
     val goalId: String? = null,
     val mediaItemId: String? = null,
+    val recurrenceRuleId: String? = null,
     val children: List<EntryDto>? = null,
 )
 
