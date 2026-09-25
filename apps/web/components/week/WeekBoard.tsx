@@ -10,9 +10,10 @@ import {
   type Announcements, type CollisionDetection, type DragEndEvent, type DragOverEvent, type DragStartEvent,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-import type { CustomListDto, EntryDto, UpdateEntryInput } from "@indice/shared";
+import type { CustomListDto, EntryDto, RecurrenceInput, RecurrenceRuleDto, UpdateEntryInput } from "@indice/shared";
 import {
-  batchEntries, createEntry, createList, deleteList, duplicateEntry, moveEntry, reorderLists, updateEntry, updateList,
+  batchEntries, createEntry, createList, deleteList, duplicateEntry, moveEntry, reorderLists, setRecurrence, stopRecurrence,
+  updateEntry, updateList,
 } from "@/lib/actions";
 import { dateBR } from "@/lib/api";
 import { addDays, capitalize, dayOfMonth, weekdayShort } from "@/lib/dates";
@@ -22,6 +23,8 @@ import { CustomLists } from "./CustomLists";
 import { EntryPanel, placeLabel, type GoalOption, type PanelOps } from "./EntryPanel";
 import { EntryView, type RowOps } from "./EntryRow";
 import { PendingAside } from "./PendingAside";
+import { RecurrencePicker } from "./RecurrencePicker";
+import { RecurringAside } from "./RecurringAside";
 import { SubtaskList, type SubtaskOps } from "./SubtaskList";
 import { Toast, type ToastData } from "./Toast";
 import {
@@ -175,7 +178,26 @@ export function WeekBoard({ today, days, initial, goals, habits, asideTop }: {
         }),
       );
     },
+    removeSeries: (e, place) => {
+      const ruleId = e.recurrenceRuleId;
+      if (!ruleId) return panel.remove(e, place);
+      setOpenId(null);
+      run([{ type: "stopRule", ruleId, today }, { type: "remove", ids: [e.id] }], async () => {
+        await stopRecurrence(ruleId);
+        await batchEntries({ action: "delete", ids: [e.id] });
+      }, () => notify("Parou de repetir; esta e as próximas foram apagadas."));
+    },
     close: () => setOpenId(null),
+  };
+
+  // ── repetição ──
+  const recurrence = {
+    set: (e: EntryDto, input: RecurrenceInput, label: string) => {
+      const rule: RecurrenceRuleDto = { id: `nova-${crypto.randomUUID()}`, text: e.text, summary: label, startDate: e.date ?? today, endDate: null, options: input };
+      run({ type: "addRule", entryId: e.id, rule }, () => setRecurrence(e.id, input), () => notify(`Repete: ${label}.`));
+    },
+    stop: (rule: RecurrenceRuleDto) =>
+      run({ type: "stopRule", ruleId: rule.id, today }, () => stopRecurrence(rule.id), () => notify(`"${rule.text}" parou de repetir.`)),
   };
   const opened = openId ? findEntry(state, openId) : null;
 
@@ -393,6 +415,7 @@ export function WeekBoard({ today, days, initial, goals, habits, asideTop }: {
           }
           onClearTraces={() => clearTraces(traces)}
         />
+        <RecurringAside rules={state.rules} onStop={recurrence.stop} />
       </aside>
 
       {opened && !opened.parent && (
@@ -405,6 +428,22 @@ export function WeekBoard({ today, days, initial, goals, habits, asideTop }: {
           goals={goals}
           ops={panel}
           subtasks={<SubtaskList parent={opened.entry} ops={sub} />}
+          recurrence={
+            opened.entry.recurrenceRuleId || (canMove(opened.entry) && opened.place.kind === "day") ? (
+              <RecurrencePicker
+                key={opened.entry.recurrenceRuleId ?? "sem-regra"}
+                date={opened.entry.date ?? today}
+                rule={
+                  opened.entry.recurrenceRuleId
+                    ? (state.rules.find((r) => r.id === opened.entry.recurrenceRuleId) ??
+                      { id: opened.entry.recurrenceRuleId, text: opened.entry.text, summary: "repete", startDate: opened.entry.date ?? today, endDate: null, options: { freq: "DAILY", interval: 1, end: { type: "never" } } })
+                    : undefined
+                }
+                onSet={(input, label) => recurrence.set(opened.entry, input, label)}
+                onStop={recurrence.stop}
+              />
+            ) : null
+          }
         />
       )}
 

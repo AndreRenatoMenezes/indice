@@ -425,7 +425,7 @@ Faixa de listas abaixo dos dias (acima dos hábitos): criar, renomear (duplo cli
 ## WP16 — Web: repetição
 
 ```yaml
-lane: planejado
+lane: revisão
 estimativa: 90min
 files:
   - apps/web/app/semana/page.tsx
@@ -448,6 +448,8 @@ No painel, escolher repetição com as opções do WeekToDo (não repete, todo d
 - [ ] "Parar" na lateral pede confirmação e tira da tela as futuras abertas.
 
 ### Log
+- 2026-09-25: iniciada
+- 2026-09-25: concluída — RecurrencePicker no painel (só para tarefa aberta de um dia; com regra mostra o resumo e 'parar de repetir' com confirmação) com as 8 opções, intervalo e fim (nunca/após N/em data); RecurringAside com as regras e 'parar' confirmado; apagar ocorrência oferece 'só esta' e 'esta e as próximas' (parar + apagar esta). weekState ganha addRule. Playwright: seg/qua/sex criado na segunda aparece na quarta e sexta com ↻ após o revalidate e na semana seguinte; 'só esta' tira só a de quarta; parar na lateral tira as futuras; 'esta e as próximas'. Semântica de 'esta e as próximas' em ocorrência futura → INBOX.
 
 ---
 

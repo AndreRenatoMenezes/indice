@@ -40,7 +40,8 @@ export type WeekAction =
   | { type: "updateList"; id: string; patch: Partial<Pick<CustomListDto, "name" | "color">> }
   | { type: "reorderLists"; ids: string[] }
   | { type: "removeList"; id: string }
-  | { type: "stopRule"; ruleId: string; today: string };
+  | { type: "stopRule"; ruleId: string; today: string }
+  | { type: "addRule"; entryId: string; rule: RecurrenceRuleDto };
 
 // ── leitura ─────────────────────────────────────────────────────────────────
 
@@ -166,6 +167,11 @@ export function weekReducer(state: WeekState, action: WeekAction): WeekState {
 
     case "removeList":
       return { ...state, lists: state.lists.filter((l) => l.id !== action.id) };
+
+    case "addRule": {
+      const linked = mapPlaces(state, (list) => list.map((e) => (e.id === action.entryId ? { ...e, recurrenceRuleId: action.rule.id } : e)));
+      return { ...linked, rules: [...linked.rules, action.rule] };
+    }
 
     case "stopRule": {
       // Parar some com as ocorrências futuras abertas e solta a regra das demais.

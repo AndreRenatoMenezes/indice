@@ -20,6 +20,8 @@ export type PanelOps = {
   duplicate: (e: EntryDto, place: Place) => void;
   copy: (e: EntryDto) => void;
   remove: (e: EntryDto, place: Place) => void;
+  /** Ocorrência repetida: "esta e as próximas" = parar a regra + apagar esta. */
+  removeSeries: (e: EntryDto, place: Place) => void;
   close: () => void;
 };
 
@@ -96,6 +98,7 @@ export function EntryPanel({ entry, place, days, lists, goals, ops, subtasks, re
 }) {
   const root = useRef<HTMLDivElement>(null);
   const [otherDate, setOtherDate] = useState("");
+  const [askSeries, setAskSeries] = useState(false);
   const movable = canMove(entry);
 
   useEffect(() => {
@@ -221,7 +224,16 @@ export function EntryPanel({ entry, place, days, lists, goals, ops, subtasks, re
       <div className="mt-7 flex flex-wrap gap-2 border-t border-[var(--rule-soft)] pt-4">
         <Chip onClick={() => ops.duplicate(entry, place)}>duplicar</Chip>
         <Chip onClick={() => ops.copy(entry)}>copiar texto</Chip>
-        <Chip onClick={() => ops.remove(entry, place)} className="text-[var(--red)]">apagar</Chip>
+        {askSeries ? (
+          <span className="flex flex-wrap items-center gap-2 text-[14px]">
+            apagar:
+            <Chip onClick={() => ops.remove(entry, place)} className="text-[var(--red)]">só esta</Chip>
+            <Chip onClick={() => ops.removeSeries(entry, place)} className="text-[var(--red)]">esta e as próximas</Chip>
+            <Chip onClick={() => setAskSeries(false)}>cancelar</Chip>
+          </span>
+        ) : (
+          <Chip onClick={() => (entry.recurrenceRuleId ? setAskSeries(true) : ops.remove(entry, place))} className="text-[var(--red)]">apagar</Chip>
+        )}
       </div>
     </div>
   );
