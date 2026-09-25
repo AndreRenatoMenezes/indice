@@ -193,7 +193,7 @@ depende_de: [WP03, WP06]
 ## WP08 — Web: dependências e camada de dados
 
 ```yaml
-lane: planejado
+lane: revisão
 estimativa: 60min
 files:
   - apps/web/package.json
@@ -213,6 +213,8 @@ Instalar `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`, `react-mark
 - [ ] `monthGrid("2026-02-11")` devolve semanas seg–dom cobrindo fevereiro inteiro (conferir no REPL/`tsx`).
 
 ### Log
+- 2026-09-25: iniciada
+- 2026-09-25: concluída — @dnd-kit/core, sortable, utilities e react-markdown via npm install (lockfile gerado pelo npm 11.19.0 do packageManager; npm ci --dry-run ok); getLists/getRecurrenceRules; revalidateJournal em todas as actions de journal + 11 actions tipadas; firstOfMonth/addMonths/monthGrid (monthGrid("2026-02-11") = 26/01..01/03, conferido com tsx).
 
 ---
 

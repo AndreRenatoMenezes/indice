@@ -1,6 +1,10 @@
 "use server";
 // Server Actions: o browser nunca fala com a API diretamente.
 import { revalidatePath } from "next/cache";
+import type {
+  CreateEntryInput, CreateListInput, CustomListDto, EntryBatchInput, EntryDto, MoveEntryInput, RecurrenceInput,
+  RecurrenceRuleDto, UpdateEntryInput, UpdateListInput,
+} from "@indice/shared";
 import { api } from "./api";
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
@@ -12,32 +16,105 @@ function refreshAll() {
 }
 
 // ── Journal ────────────────────────────────────────────────────────────────
-export async function toggleEntry(id: string, done: boolean) {
-  await api(`/entries/${id}`, { method: "PATCH", body: JSON.stringify({ status: done ? "DONE" : "OPEN" }) });
+// Diário e Semana mostram os mesmos bullets: toda action de journal revalida os dois.
+function revalidateJournal() {
   revalidatePath("/");
+  revalidatePath("/semana");
+}
+
+const json = (body: unknown) => JSON.stringify(body);
+
+export async function toggleEntry(id: string, done: boolean) {
+  await api(`/entries/${id}`, { method: "PATCH", body: json({ status: done ? "DONE" : "OPEN" }) });
+  revalidateJournal();
 }
 
 export async function addEntry(formData: FormData) {
   const text = str(formData, "text");
   if (!text) return;
-  await api("/entries", { method: "POST", body: JSON.stringify({ text, date: opt(formData, "date"), kind: opt(formData, "kind") ?? "TASK", time: opt(formData, "time"), source: "WEB" }) });
-  revalidatePath("/");
+  await api("/entries", { method: "POST", body: json({ text, date: opt(formData, "date"), kind: opt(formData, "kind") ?? "TASK", time: opt(formData, "time"), source: "WEB" }) });
+  revalidateJournal();
 }
 
 export async function migrateEntry(id: string, date: string) {
-  await api(`/entries/${id}/migrate`, { method: "POST", body: JSON.stringify({ date }) });
-  revalidatePath("/");
+  await api(`/entries/${id}/migrate`, { method: "POST", body: json({ date }) });
+  revalidateJournal();
 }
 
 export async function deleteEntry(id: string) {
   await api(`/entries/${id}`, { method: "DELETE" });
-  revalidatePath("/");
+  revalidateJournal();
 }
 
 export async function upsertDailyLog(formData: FormData) {
   const date = str(formData, "date");
-  await api(`/daily-log/${date}`, { method: "PUT", body: JSON.stringify({ wokeAt: opt(formData, "wokeAt"), mood: numOpt(formData, "mood"), energy: numOpt(formData, "energy"), sleepHours: numOpt(formData, "sleepHours"), highlights: opt(formData, "highlights") }) });
-  revalidatePath("/");
+  await api(`/daily-log/${date}`, { method: "PUT", body: json({ wokeAt: opt(formData, "wokeAt"), mood: numOpt(formData, "mood"), energy: numOpt(formData, "energy"), sleepHours: numOpt(formData, "sleepHours"), highlights: opt(formData, "highlights") }) });
+  revalidateJournal();
+}
+
+// Chamadas de componentes client (Semana), com argumentos tipados. Erro da API
+// lança: quem chama descarta o estado otimista e avisa.
+export async function createEntry(input: CreateEntryInput): Promise<EntryDto> {
+  const created = await api<EntryDto>("/entries", { method: "POST", body: json({ source: "WEB", ...input }) });
+  revalidateJournal();
+  return created;
+}
+
+export async function updateEntry(id: string, patch: UpdateEntryInput): Promise<EntryDto> {
+  const updated = await api<EntryDto>(`/entries/${id}`, { method: "PATCH", body: json(patch) });
+  revalidateJournal();
+  return updated;
+}
+
+export async function moveEntry(id: string, input: MoveEntryInput): Promise<EntryDto> {
+  const moved = await api<EntryDto>(`/entries/${id}/move`, { method: "POST", body: json(input) });
+  revalidateJournal();
+  return moved;
+}
+
+export async function batchEntries(input: EntryBatchInput): Promise<{ ids: string[] }> {
+  const r = await api<{ ids: string[] }>("/entries/batch", { method: "POST", body: json(input) });
+  revalidateJournal();
+  return r;
+}
+
+export async function duplicateEntry(id: string): Promise<EntryDto> {
+  const copy = await api<EntryDto>(`/entries/${id}/duplicate`, { method: "POST", body: "{}" });
+  revalidateJournal();
+  return copy;
+}
+
+export async function setRecurrence(id: string, input: RecurrenceInput): Promise<RecurrenceRuleDto> {
+  const rule = await api<RecurrenceRuleDto>(`/entries/${id}/recurrence`, { method: "PUT", body: json(input) });
+  revalidateJournal();
+  return rule;
+}
+
+export async function stopRecurrence(ruleId: string) {
+  await api(`/recurrence-rules/${ruleId}`, { method: "DELETE" });
+  revalidateJournal();
+}
+
+export async function createList(input: CreateListInput): Promise<CustomListDto> {
+  const list = await api<CustomListDto>("/lists", { method: "POST", body: json(input) });
+  revalidateJournal();
+  return list;
+}
+
+export async function updateList(id: string, input: UpdateListInput): Promise<CustomListDto> {
+  const list = await api<CustomListDto>(`/lists/${id}`, { method: "PATCH", body: json(input) });
+  revalidateJournal();
+  return list;
+}
+
+export async function reorderLists(ids: string[]) {
+  await api("/lists/order", { method: "PUT", body: json({ ids }) });
+  revalidateJournal();
+}
+
+export async function deleteList(id: string) {
+  await api(`/lists/${id}`, { method: "DELETE" });
+  revalidateJournal();
 }
 
 // ── Hábitos ────────────────────────────────────────────────────────────────
