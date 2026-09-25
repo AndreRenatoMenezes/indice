@@ -4,12 +4,11 @@
 
 | Feature | Domínio | Status |
 |---|---|---|
-| 001-lista-semanal | journal | 🟡 esclarecendo |
+| 001-lista-semanal | journal | 🟢 spec pronta, plano em rascunho |
 
 ## Próximas
 
-1. Listas personalizadas na Semana: "Algum dia", "Projetos", com arrastar entre lista e dia (paridade com o WeekToDo).
-2. Tarefas recorrentes: a regra já está modelada, faltam a materialização por data e a tela.
+1. Aba semanal no Android — reaproveita mover, lote, listas e recorrência da 001.
 
 ## Concluídas recentemente
 
