@@ -35,9 +35,9 @@ export function Column({ place, title, aside, highlight, dropping, entries, ops,
       {highlight && <Sketch radius={12} fill="var(--paper-raised)" stroke="var(--line)" />}
       {dropping && <Sketch radius={12} stroke="var(--accent)" dash />}
       <div className="relative">
-        <div className="mb-3 flex items-baseline justify-between gap-2 border-b border-[var(--rule-soft)] pb-1.5">
-          {titleSlot ?? <span className="label min-w-0 break-words">{title}</span>}
-          <span className="flex flex-none items-baseline gap-2">
+        <div className="mb-3 flex items-baseline justify-between gap-1.5 border-b border-[var(--rule-soft)] pb-1.5">
+          {titleSlot ?? <span className="label min-w-0 break-words tracking-[0.14em]">{title}</span>}
+          <span className="flex flex-none items-baseline gap-1">
             {aside}
             {menu}
           </span>

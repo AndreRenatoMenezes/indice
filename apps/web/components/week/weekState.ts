@@ -197,3 +197,8 @@ export function entryAsText(e: EntryDto, indent = ""): string {
   for (const c of e.children ?? []) lines.push(`${indent}  - ${c.status === "DONE" ? "[x]" : "[ ]"} ${c.text}`);
   return lines.join("\n");
 }
+
+/** "Quarta, 24/09" + um item por tarefa (sem os rastros ›), subtarefas indentadas. */
+export function listAsText(title: string, entries: EntryDto[]): string {
+  return [title, ...entries.filter((e) => e.status !== "MIGRATED").map((e) => entryAsText(e))].join("\n");
+}

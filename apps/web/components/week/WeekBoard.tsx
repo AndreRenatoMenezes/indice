@@ -13,14 +13,16 @@ import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import type { EntryDto, UpdateEntryInput } from "@indice/shared";
 import { batchEntries, createEntry, duplicateEntry, moveEntry, updateEntry } from "@/lib/actions";
 import { dateBR } from "@/lib/api";
-import { dayOfMonth, weekdayShort } from "@/lib/dates";
+import { addDays, capitalize, dayOfMonth, weekdayShort } from "@/lib/dates";
 import { Column } from "./Column";
+import { ColumnMenu } from "./ColumnMenu";
 import { EntryPanel, placeLabel, type GoalOption, type PanelOps } from "./EntryPanel";
 import { EntryView, type RowOps } from "./EntryRow";
+import { PendingAside } from "./PendingAside";
 import { SubtaskList, type SubtaskOps } from "./SubtaskList";
 import { Toast, type ToastData } from "./Toast";
 import {
-  draftEntry, entryAsText, findEntry, isManual, parsePlaceKey, placeKey, rootsAt, samePlace, weekReducer,
+  canMove, draftEntry, entryAsText, findEntry, isManual, listAsText, parsePlaceKey, placeKey, rootsAt, samePlace, weekReducer,
   type Place, type WeekAction, type WeekState,
 } from "./weekState";
 
@@ -47,7 +49,7 @@ const announcements: Announcements = {
 // cliente dispara o aviso de `key` no React 19 em desenvolvimento.
 const Slot = ({ children }: { children: ReactNode }) => <div className="contents">{children}</div>;
 
-export function WeekBoard({ today, days, initial, goals, habits, asideTop, asideBottom }: {
+export function WeekBoard({ today, days, initial, goals, habits, asideTop }: {
   /** "Hoje" no fuso da API. */
   today: string;
   /** Segunda a domingo da semana vista. */
@@ -57,7 +59,6 @@ export function WeekBoard({ today, days, initial, goals, habits, asideTop, aside
   /** Partes renderizadas no servidor (não mudam com os gestos). */
   habits: ReactNode;
   asideTop: ReactNode;
-  asideBottom?: ReactNode;
 }) {
   const [state, apply] = useOptimistic(initial, weekReducer);
   const [, startTransition] = useTransition();
@@ -194,6 +195,80 @@ export function WeekBoard({ today, days, initial, goals, habits, asideTop, aside
       ),
   };
 
+  // ── ações de vários de uma vez (menu do dia, lateral) ──
+  const copyText = (text: string) =>
+    navigator.clipboard.writeText(text).then(() => notify("Lista copiada."), () => notify("Não deu para copiar.", { tone: "error" }));
+
+  const completeAll = (entries: EntryDto[]) => {
+    const ids = entries.filter((e) => e.status === "OPEN").map((e) => e.id);
+    if (!ids.length) return notify("Nada aberto para concluir.");
+    run({ type: "update", ids, patch: { status: "DONE" } }, () => batchEntries({ action: "complete", ids }));
+  };
+
+  /** Migra raízes abertas (com rastro) para uma data, em lote. */
+  const migrateAll = (items: { entry: EntryDto; place: Place }[], date: string, done?: () => void) => {
+    const movable = items.filter(({ entry, place }) => canMove(entry) && !samePlace(place, { kind: "day", date }));
+    if (!movable.length) return notify("Nada pendente para levar.");
+    const to: Place = { kind: "day", date };
+    run(
+      movable.map(({ entry }) => ({ type: "move" as const, id: entry.id, to, beforeId: null, copyId: crypto.randomUUID() })),
+      () => batchEntries({ action: "migrate", ids: movable.map(({ entry }) => entry.id), date }),
+      done,
+    );
+  };
+
+  /** Apaga rastros › (um ou vários) com "desfazer". */
+  const clearTraces = (items: { entry: EntryDto; place: Place }[]) => {
+    const ids = items.map(({ entry }) => entry.id);
+    if (!ids.length) return;
+    run({ type: "remove", ids }, () => batchEntries({ action: "delete", ids }), () =>
+      notify(ids.length === 1 ? "Rastro apagado." : `${ids.length} migradas apagadas.`, {
+        undo: () => run(items.map(({ entry, place }) => ({ type: "create" as const, place, entry })), () => batchEntries({ action: "restore", ids })),
+      }),
+    );
+  };
+
+  const dayItems = (pred: (e: EntryDto) => boolean) =>
+    days.flatMap((d) => (state.days[d] ?? []).filter(pred).map((entry) => ({ entry, place: { kind: "day", date: d } as Place })));
+  const pending = dayItems((e) => e.status === "OPEN" && !!e.date && e.date < today);
+  const traces = dayItems((e) => e.status === "MIGRATED");
+
+  const dayMenu = (d: string) => {
+    const entries = state.days[d] ?? [];
+    const tomorrow = addDays(d, 1);
+    const title = `${capitalize(weekdayShort(d))}, ${dateBR(d).slice(0, 5)}`;
+    return (
+      <ColumnMenu
+        label={title}
+        items={[
+          { label: "concluir todas", onSelect: () => completeAll(entries) },
+          {
+            label: "adiar pendentes para amanhã",
+            onSelect: () =>
+              migrateAll(entries.map((entry) => ({ entry, place: { kind: "day", date: d } })), tomorrow, () => {
+                if (!state.days[tomorrow]) notify(`Pendentes foram para ${weekdayShort(tomorrow)}, ${dateBR(tomorrow).slice(0, 5)} — próxima semana.`);
+              }),
+          },
+          { label: "copiar a lista", onSelect: () => copyText(listAsText(title, entries)) },
+        ]}
+      />
+    );
+  };
+
+  const rowActions = (place: Place) => (e: EntryDto) =>
+    e.status === "MIGRATED" ? (
+      <button
+        type="button"
+        title="apagar rastro"
+        aria-label={`apagar rastro de ${e.text}`}
+        onClick={(ev) => { ev.stopPropagation(); clearTraces([{ entry: e, place }]); }}
+        onDoubleClick={(ev) => ev.stopPropagation()}
+        className="flex-none cursor-pointer text-[var(--ink-faint)] opacity-0 group-hover:opacity-100 focus:opacity-100"
+      >
+        ×
+      </button>
+    ) : null;
+
   const ops: RowOps = {
     toggle: (e: EntryDto) => {
       const status = e.status === "DONE" ? "OPEN" : "DONE";
@@ -230,6 +305,8 @@ export function WeekBoard({ today, days, initial, goals, habits, asideTop, aside
                   entries={state.days[d] ?? []}
                   ops={ops}
                   onCreate={(text) => create(place, text)}
+                  menu={dayMenu(d)}
+                  rowActions={rowActions(place)}
                 />
               );
             })}
@@ -247,7 +324,15 @@ export function WeekBoard({ today, days, initial, goals, habits, asideTop, aside
 
       <aside className="flex min-w-0 flex-col gap-5">
         <Slot>{asideTop}</Slot>
-        <Slot>{asideBottom}</Slot>
+        <PendingAside
+          pending={pending.map(({ entry }) => entry)}
+          traces={traces.length}
+          onOpen={setOpenId}
+          onMigrateAll={() =>
+            migrateAll(pending, today, () => { if (!state.days[today]) notify(`Pendentes foram para hoje, ${dateBR(today).slice(0, 5)}.`); })
+          }
+          onClearTraces={() => clearTraces(traces)}
+        />
       </aside>
 
       {opened && !opened.parent && (

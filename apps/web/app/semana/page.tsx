@@ -1,6 +1,6 @@
 import type { EntryDto } from "@indice/shared";
-import { getEntriesRange, getGoals, getHabitsToday, getLists, getRecurrenceRules, dateBR } from "@/lib/api";
-import { addDays, dayOfMonth, isoWeek, monthName, weekOf } from "@/lib/dates";
+import { getEntriesRange, getGoals, getHabitsToday, getLists, getRecurrenceRules } from "@/lib/api";
+import { dayOfMonth, isoWeek, monthName, weekOf } from "@/lib/dates";
 import { Card, Empty, Pill, Progress, SketchLine, Stat, WeekDots } from "@/components/ui";
 import { PageHead, SectionLabel } from "@/components/paper";
 import { WeekBoard } from "@/components/week/WeekBoard";
@@ -42,8 +42,6 @@ export default async function Semana({ searchParams }: { searchParams: Promise<{
   const done = entries.filter((e) => e.status === "DONE").length;
   const streak = viewed.habits.reduce((max, h) => Math.max(max, h.streak), 0);
   const tags = [...new Set(entries.flatMap((e) => e.tags))];
-  // Candidatas a migrar: aberto em dia da semana que já passou.
-  const pending = entries.filter((e) => e.status === "OPEN" && e.date && e.date < today);
 
   return (
     <>
@@ -102,23 +100,6 @@ export default async function Semana({ searchParams }: { searchParams: Promise<{
                   {tags.map((t) => <Pill key={t} tone="gray">{t}</Pill>)}
                 </div>
               </Card>
-            )}
-          </div>
-        }
-        asideBottom={
-          <div>
-            <SectionLabel className="mb-3">Migrar para {isoWeek(addDays(viewed.date, 7))}</SectionLabel>
-            {pending.length ? (
-              <ul className="flex flex-col gap-2.5">
-                {pending.map((e) => (
-                  <li key={e.id} className="flex items-baseline gap-3">
-                    <span className="label tracking-[0.16em] text-[var(--ink-faint)]">{dateBR(e.date).slice(0, 5)}</span>
-                    <span className="flex-1 text-base">{e.text}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <Empty>Nada pendente por aqui.</Empty>
             )}
           </div>
         }

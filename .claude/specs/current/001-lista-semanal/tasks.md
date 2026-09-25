@@ -365,7 +365,7 @@ Criar (Enter), marcar, editar (duplo clique), reordenar (arrastar, `DndContext` 
 ## WP14 — Web: ações de dia, pendentes e rastro
 
 ```yaml
-lane: planejado
+lane: revisão
 estimativa: 75min
 files:
   - apps/web/app/semana/page.tsx
@@ -388,6 +388,8 @@ Menu do dia (concluir todas, adiar pendentes para amanhã, copiar a lista); late
 - [ ] "Copiar a lista" gera "Quarta, 24/09" + um bullet por tarefa com subtarefas indentadas.
 
 ### Log
+- 2026-09-25: iniciada
+- 2026-09-25: concluída — ColumnMenu (⋯: concluir todas, adiar pendentes para amanhã, copiar a lista), PendingAside (pendentes de dias passados da semana + 'migrar todas para hoje' com o today da API + 'limpar migradas desta semana (N)'), '×' de apagar rastro nas migradas; tudo em lote com desfazer onde apaga. Substitui a seção 'Migrar para N' do servidor. Playwright: adiar na terça → quarta com › na terça; migrar todas → quinta (hoje); limpar 8 migradas e desfazer traz todas; apagar um rastro e desfazer; copiar 'Quinta, 24/09' + checklist com subtarefas; adiar no domingo → aviso 'próxima semana'; concluir todas.
 
 ---
 
