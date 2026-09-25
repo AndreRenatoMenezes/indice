@@ -396,7 +396,7 @@ Menu do dia (concluir todas, adiar pendentes para amanhã, copiar a lista); late
 ## WP15 — Web: listas personalizadas
 
 ```yaml
-lane: planejado
+lane: revisão
 estimativa: 90min
 files:
   - apps/web/app/semana/page.tsx
@@ -417,6 +417,8 @@ Faixa de listas abaixo dos dias (acima dos hábitos): criar, renomear (duplo cli
 - [ ] Ordem das listas persiste ao recarregar.
 
 ### Log
+- 2026-09-25: iniciada
+- 2026-09-25: concluída — CustomLists (faixa abaixo dos dias, acima dos hábitos; '+ nova lista'; duplo clique no nome renomeia) com colunas iguais às dos dias no mesmo DndContext; menu da lista: concluir todas, copiar, ‹ mover ›, apagar (window.confirm com a contagem). Playwright: lista→quinta sai sem rastro; quinta→lista deixa › na quinta; ordem persiste ao recarregar; menu sem 'adiar'; confirmação 'Apagar a lista "…"? 1 tarefa some junto.'
 
 ---
 

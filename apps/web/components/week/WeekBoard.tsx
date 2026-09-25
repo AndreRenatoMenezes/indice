@@ -10,12 +10,15 @@ import {
   type Announcements, type CollisionDetection, type DragEndEvent, type DragOverEvent, type DragStartEvent,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-import type { EntryDto, UpdateEntryInput } from "@indice/shared";
-import { batchEntries, createEntry, duplicateEntry, moveEntry, updateEntry } from "@/lib/actions";
+import type { CustomListDto, EntryDto, UpdateEntryInput } from "@indice/shared";
+import {
+  batchEntries, createEntry, createList, deleteList, duplicateEntry, moveEntry, reorderLists, updateEntry, updateList,
+} from "@/lib/actions";
 import { dateBR } from "@/lib/api";
 import { addDays, capitalize, dayOfMonth, weekdayShort } from "@/lib/dates";
 import { Column } from "./Column";
 import { ColumnMenu } from "./ColumnMenu";
+import { CustomLists } from "./CustomLists";
 import { EntryPanel, placeLabel, type GoalOption, type PanelOps } from "./EntryPanel";
 import { EntryView, type RowOps } from "./EntryRow";
 import { PendingAside } from "./PendingAside";
@@ -255,6 +258,42 @@ export function WeekBoard({ today, days, initial, goals, habits, asideTop }: {
     );
   };
 
+  // ── listas personalizadas ──
+  const lists = {
+    create: (name: string) => {
+      const list: CustomListDto = { id: `nova-${crypto.randomUUID()}`, name, color: null, sortOrder: Number.MAX_SAFE_INTEGER, entries: [] };
+      run({ type: "createList", list }, () => createList({ name }));
+    },
+    rename: (l: CustomListDto, name: string) => run({ type: "updateList", id: l.id, patch: { name } }, () => updateList(l.id, { name })),
+    shift: (l: CustomListDto, by: -1 | 1) => {
+      const ids = state.lists.map((x) => x.id);
+      const i = ids.indexOf(l.id);
+      const j = i + by;
+      if (i < 0 || j < 0 || j >= ids.length) return;
+      [ids[i], ids[j]] = [ids[j]!, ids[i]!];
+      run({ type: "reorderLists", ids }, () => reorderLists(ids));
+    },
+    remove: (l: CustomListDto) => {
+      const n = l.entries.length;
+      const what = n === 0 ? "Ela está vazia." : n === 1 ? "1 tarefa some junto." : `${n} tarefas somem junto.`;
+      if (!window.confirm(`Apagar a lista "${l.name}"? ${what}`)) return;
+      run({ type: "removeList", id: l.id }, () => deleteList(l.id), () => notify(`Lista "${l.name}" apagada.`));
+    },
+  };
+
+  const listMenu = (l: CustomListDto, index: number) => (
+    <ColumnMenu
+      label={l.name}
+      items={[
+        { label: "concluir todas", onSelect: () => completeAll(l.entries) },
+        { label: "copiar a lista", onSelect: () => copyText(listAsText(l.name, l.entries)) },
+        { label: "‹ mover para a esquerda", onSelect: () => lists.shift(l, -1), disabled: index === 0 },
+        { label: "mover para a direita ›", onSelect: () => lists.shift(l, 1), disabled: index === state.lists.length - 1 },
+        { label: "apagar lista", onSelect: () => lists.remove(l), danger: true },
+      ]}
+    />
+  );
+
   const rowActions = (place: Place) => (e: EntryDto) =>
     e.status === "MIGRATED" ? (
       <button
@@ -311,6 +350,27 @@ export function WeekBoard({ today, days, initial, goals, habits, asideTop }: {
               );
             })}
           </div>
+          <CustomLists
+            lists={state.lists}
+            onCreateList={lists.create}
+            onRename={lists.rename}
+            renderList={(l, title) => {
+              const place: Place = { kind: "list", id: l.id };
+              return (
+                <Column
+                  place={place}
+                  title={l.name}
+                  titleSlot={title}
+                  dropping={overKey === placeKey(place)}
+                  entries={l.entries}
+                  ops={ops}
+                  onCreate={(text) => create(place, text)}
+                  menu={listMenu(l, state.lists.indexOf(l))}
+                  rowActions={rowActions(place)}
+                />
+              );
+            }}
+          />
           <Slot>{habits}</Slot>
         </main>
         <DragOverlay dropAnimation={null}>
