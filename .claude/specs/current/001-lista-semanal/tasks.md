@@ -85,7 +85,7 @@ Consultas por intervalo e por lista devolvem árvore; mover/reordenar/migrar/rea
 ## WP04 — API: lote e duplicar
 
 ```yaml
-lane: planejado
+lane: revisão
 estimativa: 60min
 files:
   - apps/api/src/routes/entries.ts
@@ -102,6 +102,8 @@ depende_de: [WP03]
 - [ ] `duplicate`: 400 para subtarefa; cópia `OPEN` no fim, subtarefas reabertas, sem regra nem `migratedFromId`.
 
 ### Log
+- 2026-09-25: iniciada
+- 2026-09-25: concluída — POST /entries/batch (complete/migrate/delete/restore; só ids do usuário, responde os afetados; migrate usa migrateInto/relocateInto em ordem de data e posição, numa transação) e POST /entries/:id/duplicate (400 subtarefa). curl: delete+restore devolve status e subtarefas intactos; id inexistente e fechada ignorados.
 
 ---
 

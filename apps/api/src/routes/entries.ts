@@ -1,12 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma, type Collection, type Entry, type Prisma } from "@indice/db";
-import { CreateEntryInput, MoveEntryInput, UpdateEntryInput, isoDate, type EntryDto } from "@indice/shared";
+import { CreateEntryInput, EntryBatchInput, MoveEntryInput, UpdateEntryInput, isoDate, type EntryDto } from "@indice/shared";
 import { parse, dateOrNull } from "../lib/http.js";
 import { daysBetween, fromISODate, todayISO } from "../lib/dates.js";
 import { config } from "../config.js";
 import { reposition, sortEntries } from "../modules/journal/ordering.js";
-import { canLeaveCollection, migrationCopy, moveKind } from "../modules/journal/moves.js";
+import { canLeaveCollection, duplicateCopy, migrationCopy, moveKind } from "../modules/journal/moves.js";
 
 // Teto do intervalo `?from&to`: cobre um mês com as semanas de borda.
 const MAX_RANGE_DAYS = 62;
@@ -228,6 +228,72 @@ export async function entriesRoutes(app: FastifyInstance) {
     // Aqui subtarefa também é "não pode sair" (409), não pedido malformado.
     if (!r.ok) return reply.code(r.code === 400 ? 409 : r.code).send({ error: r.error });
     return reply.code(201).send(await withChildren(r.entry));
+  });
+
+  // Ações sobre vários ids de uma vez: concluir todas, adiar/migrar pendentes,
+  // apagar (rastros, "limpar migradas") e restaurar ("desfazer"). Responde só
+  // os ids afetados; ids de outro usuário são ignorados.
+  app.post("/entries/batch", async (req, reply) => {
+    const body = parse(EntryBatchInput, req.body, reply);
+    if (!body) return;
+    const mine = { id: { in: body.ids }, userId: req.userId };
+
+    if (body.action === "complete") {
+      const ids = await prisma.$transaction(async (tx) => {
+        const rows = await tx.entry.findMany({ where: { ...mine, deletedAt: null, parentId: null, status: "OPEN" }, select: { id: true } });
+        const ids = rows.map((r) => r.id);
+        await tx.entry.updateMany({ where: { id: { in: ids } }, data: { status: "DONE", completedAt: new Date() } });
+        return ids;
+      });
+      return { ids };
+    }
+
+    if (body.action === "migrate") {
+      const dest = await ensureDailyCollection(req.userId, body.date);
+      const ids = await prisma.$transaction(async (tx) => {
+        const rows = await tx.entry.findMany({
+          where: { ...mine, deletedAt: null, parentId: null, status: "OPEN" },
+          include: { collection: true, children: { where: { deletedAt: null } } },
+          orderBy: [{ date: "asc" }, { position: "asc" }],
+        });
+        const moved: string[] = [];
+        for (const src of rows) {
+          const kind = moveKind(src.collection, dest);
+          if (kind === "reorder") continue;
+          if (kind === "migrate") await migrateInto(tx, req.userId, src, dest, null);
+          else await relocateInto(tx, src, dest, null);
+          moved.push(src.id);
+        }
+        return moved;
+      });
+      return { ids };
+    }
+
+    const deleting = body.action === "delete";
+    const ids = await prisma.$transaction(async (tx) => {
+      const rows = await tx.entry.findMany({ where: { ...mine, deletedAt: deleting ? null : { not: null } }, select: { id: true } });
+      const ids = rows.map((r) => r.id);
+      await tx.entry.updateMany({ where: { id: { in: ids } }, data: { deletedAt: deleting ? new Date() : null } });
+      return ids;
+    });
+    return { ids };
+  });
+
+  // Nova tarefa aberta no mesmo lugar, no fim, com todas as subtarefas reabertas.
+  app.post("/entries/:id/duplicate", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const src = await prisma.entry.findFirst({ where: { id, userId: req.userId, deletedAt: null }, include: { children: { where: { deletedAt: null } } } });
+    if (!src) return reply.code(404).send({ error: "not found" });
+    if (src.parentId) return reply.code(400).send({ error: "subtarefa não se duplica" });
+    const { entry, children } = duplicateCopy(src, src.children);
+    const copy = await prisma.$transaction(async (tx) => {
+      const created = await tx.entry.create({
+        data: { ...entry, userId: req.userId, position: await nextPosition(tx, src.collectionId), children: { create: children.map((c) => ({ ...c, userId: req.userId })) } },
+      });
+      await placeAmongSiblings(tx, src.collectionId, null, created.id, null);
+      return tx.entry.findUniqueOrThrow({ where: { id: created.id } });
+    });
+    return reply.code(201).send(await withChildren(copy));
   });
 
   app.delete("/entries/:id", async (req, reply) => {
