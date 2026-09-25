@@ -166,7 +166,7 @@ depende_de: [WP03, WP05]
 ## WP07 — API: listas personalizadas e README
 
 ```yaml
-lane: planejado
+lane: revisão
 estimativa: 60min
 files:
   - apps/api/src/routes/lists.ts
@@ -185,6 +185,8 @@ depende_de: [WP03, WP06]
 - [ ] README: linha da tabela de endpoints do journal cobre `move`, `batch`, `duplicate`, `/lists`, `/recurrence-rules` e `PUT /entries/:id/recurrence`.
 
 ### Log
+- 2026-09-25: iniciada
+- 2026-09-25: concluída — routes/lists.ts (GET/POST /lists, PATCH/DELETE /lists/:id, PUT /lists/order) registrado no app.ts; README com move, batch, duplicate, lists e recorrência. curl ok: árvore por lista em sortOrder, nome com trim, ordem ignora id alheio, apagar some com a lista e as tarefas (GET /lists e ?collectionId), dia→lista deixa ›.
 
 ---
 
