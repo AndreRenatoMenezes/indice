@@ -60,7 +60,7 @@ depende_de: []
 ## WP03 — API: árvore com subtarefas e `POST /entries/:id/move`
 
 ```yaml
-lane: planejado
+lane: revisão
 estimativa: 90min
 files:
   - apps/api/src/routes/entries.ts
@@ -77,6 +77,8 @@ Consultas por intervalo e por lista devolvem árvore; mover/reordenar/migrar/rea
 - [ ] `POST /entries/:id/migrate` continua respondendo 201 com a cópia (Diário e Android seguem funcionando).
 
 ### Log
+- 2026-09-25: iniciada
+- 2026-09-25: concluída — entryTree único para ?date/?from&to/?collectionId (from e to obrigatórios juntos, teto 62 dias); moveEntry (reorder/migrate/relocate numa transação) atende /move e /migrate (201; 409 se fechada ou subtarefa). Roteiro curl ok: seg→sex deixa › e leva só subtarefas abertas; lista→dia mantém id e todas; reordenar com hora não muda nada.
 
 ---
 
