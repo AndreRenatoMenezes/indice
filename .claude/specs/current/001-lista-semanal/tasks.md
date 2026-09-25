@@ -221,7 +221,7 @@ Instalar `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`, `react-mark
 ## WP09 — Web: quadro semanal editável (sem arrastar)
 
 ```yaml
-lane: planejado
+lane: revisão
 estimativa: 90min
 files:
   - apps/web/app/semana/page.tsx
@@ -246,6 +246,8 @@ A página vira casca de servidor + `WeekBoard` otimista: criar no pé do dia, co
 - [ ] Com a API parada, criar uma tarefa: ela some e o `Toast` avisa.
 
 ### Log
+- 2026-09-25: iniciada
+- 2026-09-25: concluída — page.tsx vira casca (busca semana, listas, regras e metas em paralelo; hoje da API) + WeekBoard otimista (useOptimistic + transição; falha → Toast e a tela volta), Column, EntryRow (Bullet do paper.tsx; clique 250 ms → onOpen, duplo clique edita), NewEntryInput, Toast, weekState (reducer já com as ações das WPs seguintes). Hábitos, sequência, metas e coleções seguem no servidor como slots. Playwright: Enter cria e mantém foco, vazio ignorado, Esc limpa, concluir/reabrir, editar (vazio mantém, Esc desiste); API parada → some + aviso.
 
 ---
 
