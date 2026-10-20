@@ -64,3 +64,25 @@ Entrada: data · autor · decisão · racional · alternativas rejeitadas · cus
 - **Decisão:** partição da 002 em WP00 a WP06 conforme `current/002-infra-ambientes/tasks.md`. WP01 a WP03 têm um dono (DevOps) em paths disjuntos; `CLAUDE.md` vai para a WP01.
 - **Racional:** sugestão de fronteiras da Leia no `plan.md`.
 - **Custo de reverter:** baixo.
+
+## 2026-10-20 · Leia (Arquiteto)
+
+- **Decisão:** emenda da 002 após os riscos levantados pelo Obi na entrega de WP01–WP03. (1) Imagens de QA vão para um repositório próprio do Artifact Registry (`indice-qa`), Produção fica em `indice`; cada um mantém as 10 versões mais recentes, com a política aplicada de fato (`--no-dry-run`). (2) O `bootstrap.sh <email-web-qa> <email-usuario-app>` do Obi é aceito; ganha conferência do e-mail do app contra o `INDICE_USER_EMAIL` do job `indice-seed` de Produção, abortando se divergir. (4) Texto da spec alinhado ao rekey implementado: o reset remove chaves não-QA e não rotaciona a de QA; rotação documentada à parte. (5) Provas de `neonctl branches reset --parent`, política de limpeza efetiva e `_TAG` ausente viram critérios da WP04/WP06; se o Cloud Build aceitar `_TAG` vazia, o `cloudbuild.yaml` ganha passo de guarda.
+- **Racional:** com repositório compartilhado e limpeza por contagem, mais de 10 deploys de QA entre dois de Produção apagariam a imagem em uso e o rollback; manter por idade (`newerThan: 30d`) apaga tudo de Produção após 30 dias sem deploy. Seed com e-mail diferente cria usuário vazio e QA deixa de ser cópia útil.
+- **Alternativas rejeitadas:** `Keep newerThan 30d`; aumentar `keepCount` (só adia o problema); derivar o e-mail só do job de Produção sem argumento (o job pode não ter a variável).
+- **Custo de reverter:** baixo (um repositório, uma substituição, uma checagem em script).
+- **Escopo afetado:** `002-infra-ambientes/spec.md`, `plan.md`; WP01 (README), WP02 (`bootstrap.sh`), WP03 (`deploy.yml`), WP04, WP06.
+
+## 2026-10-20 · Luke (Maestro)
+
+- **Decisão:** APK de QA e Produção com o mesmo `applicationId` (opção A da Leia): aceitar e documentar na 002; feature Android `003` (applicationIdSuffix `.qa`) fica no INBOX. WP01–WP03 voltam a `fazendo` para a emenda da Leia (repositório `indice-qa`, `_REPO`, checagem de e-mail no bootstrap, texto do rekey).
+- **Racional:** recomendação da Arquiteta, não bloqueia a 002, custo de reverter baixo; o usuário pode pedir a 003 quando quiser.
+- **Escopo afetado:** `infra/cloudrun/**`, `.github/workflows/deploy.yml`, INBOX.
+
+## 2026-10-20 · Leia (Arquiteto)
+
+- **Decisão:** aprovado o desvio de forma do Obi na WP02. O gcloud 585.0.0 não tem `set-cleanup-policies --no-dry-run` (só `--dry-run`), então o `bootstrap.sh` aplica a política sem a flag, lê `cleanupPolicyDryRun` e, se vier `True`, desliga por PATCH na API REST do Artifact Registry (`updateMask=cleanupPolicyDryRun`, token fora dos argumentos), imprimindo o valor final por repositório. O contrato passa a exigir o resultado (`cleanupPolicyDryRun` falso), não a flag.
+- **Racional:** o intento (política efetiva) se mantém; a prova (a) da WP04 já verifica o estado no `describe`, independentemente do caminho.
+- **Alternativas rejeitadas:** atualizar o gcloud à espera da flag (não garantida); deixar em dry run (a limpeza não apagaria nada).
+- **Custo de reverter:** baixo.
+- **Escopo afetado:** `002-infra-ambientes/plan.md` (decisão de limpeza, WP02, prova (a) da WP04); substitui o "`--no-dry-run`" da decisão anterior.

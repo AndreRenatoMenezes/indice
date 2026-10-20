@@ -29,7 +29,9 @@ Mergeio um PR em `development` e o QA se atualiza sozinho; mergeio `development`
 - **Migrações compatíveis com a revisão anterior:** como a migração roda antes da troca de revisão, a revisão velha convive com o schema novo por alguns segundos. Remoção/renomeação de coluna é feita em dois deploys (expandir, depois contrair).
 - **Isolamento:** QA nunca escreve no banco de Produção (a branch Neon é cópia, não espelho); a chave de API de QA não abre a Produção, e vice-versa — inclusive depois de um reset da cópia, que traz de volta o registro da chave de Produção e precisa removê-lo.
 - **Dado real fora da Produção só atrás de login:** a web de QA não aceita acesso anônimo; a API de QA não aceita a chave de Produção.
-- **Recopiar é um comando:** atualizar QA com os dados de hoje da Produção (reset da branch Neon a partir da principal) é um script documentado que termina com QA reaplicando suas migrações pendentes e trocando a chave.
+- **Recopiar é um comando:** atualizar QA com os dados de hoje da Produção (reset da branch Neon a partir da principal) é um script documentado que termina com QA reaplicando suas migrações pendentes e **removendo da cópia toda chave de API que não seja a de QA** (a de Produção vem junto na cópia). A chave de QA não é rotacionada pelo reset; rotacionar é gravar nova versão do secret de QA e rodar seed + rekey.
+- **A cópia continua sendo do mesmo usuário:** o seed de QA registra a chave de QA no `User` copiado da Produção (mesmo e-mail), nunca num usuário novo e vazio.
+- **Imagens de Produção sobrevivem ao ritmo do QA:** as imagens usadas por Produção (a atual e as de rollback) nunca são apagadas por deploys de QA, quantos forem.
 - **`main` não recebe push direto de ninguém**, nem admin; só PR de `development` ou `hotfix/*` com CI verde.
 - **Um deploy por ambiente por vez:** dois merges seguidos em `development` não se atropelam; o segundo espera o primeiro.
 - **Só código que passou no CI vai para um ambiente:** o deploy roda sobre o commit mergeado e depende do CI desse mesmo commit.
@@ -47,7 +49,9 @@ Mergeio um PR em `development` e o QA se atualiza sozinho; mergeio `development`
 - [ ] Migração com erro faz o workflow falhar antes de `gcloud run deploy`; a URL do ambiente continua respondendo com a revisão anterior.
 - [ ] `GET /health` da API de QA responde 200; `GET /habits/today` da API de QA responde 200 com a chave de QA e 401 com a chave de Produção (e o inverso na Produção). Vale também logo após rodar o reset de QA.
 - [ ] Abrir a URL `*.run.app` de `indice-web-qa` numa janela anônima responde 403; pelo `gcloud run services proxy indice-web-qa` com a conta do Andre, a página carrega com os dados copiados.
-- [ ] Rodar o script de reset de QA deixa a branch Neon `qa` com os dados atuais da Produção, as migrações de `development` aplicadas e só a chave de QA válida.
+- [ ] Rodar o script de reset de QA deixa a branch Neon `qa` com os dados atuais da Produção, as migrações de `development` aplicadas e só a chave de QA válida; `GET /habits/today` com a chave de QA devolve os dados copiados (não lista vazia), e a tabela `User` de `qa` tem o mesmo número de linhas da Produção.
+- [ ] Imagens de QA e de Produção ficam em repositórios separados do Artifact Registry, cada um com política de limpeza **efetiva** (não *dry run*) que mantém as 10 versões mais recentes; a imagem que serve Produção continua existindo depois de 11 deploys de QA seguidos.
+- [ ] Build sem `_TAG` falha antes de publicar qualquer imagem.
 - [ ] O repositório não contém nenhuma connection string, chave de API nem JSON de conta de serviço (busca por `postgresql://`, `private_key`, valores das chaves → zero ocorrências fora de exemplos com placeholder).
 - [ ] O provider WIF recusa token de outro repositório (condição `assertion.repository`), e o ambiente `production` do GitHub só aceita deploy a partir de `main`.
 - [ ] O README de `infra/cloudrun` descreve: preparar um ambiente do zero, o fluxo de branches, como reverter uma revisão e como gerar o APK apontando para QA.
@@ -56,6 +60,7 @@ Mergeio um PR em `development` e o QA se atualiza sozinho; mergeio `development`
 
 - **Autenticação na web.** Hoje `indice-web` é pública e sem login (a chave fica no servidor) — qualquer um com a URL vê os dados. Registrado no INBOX; não é resolvido aqui para Produção. Em QA a mitigação é fechar o serviço por IAM (acima).
 - **APK publicado pelo CI.** O repositório é público: artefatos do Actions são baixáveis por qualquer conta GitHub, e o APK carrega a chave de API. O APK de QA é gerado localmente com `-Pindice.apiBaseUrl`/`-Pindice.apiKey` (já suportado pelo `build.gradle.kts`); distribuição automática (ex. Firebase App Distribution) fica para depois.
+- **APK de QA ao lado do de Produção.** O APK de QA usa o mesmo `applicationId` (`dev.indice.app`) e substitui o de Produção no aparelho; isso fica documentado no README. Instalar os dois lado a lado (`applicationIdSuffix`) é mudança no Android, fora desta feature: candidata a 003 no INBOX (decisão do Luke, 2026-10-20).
 - Ambientes efêmeros por PR, domínio próprio, Terraform, Cloud SQL, monitoramento/alertas.
 - Rollback automático de migração.
 

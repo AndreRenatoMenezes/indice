@@ -7,6 +7,7 @@ virar feature, o Spec Architect abre uma spec.
 - Imprimir / exportar a semana em PDF (o WeekToDo tem "PDF / Imprimir").
 - Alarme no horário da tarefa: o campo existe no modelo, sem uso; depende de ter notificações.
 - Editar a regra de uma repetição já criada (hoje: parar e criar de novo).
+- APK de QA instalável ao lado do de Produção (candidata a 003, só Android): `applicationIdSuffix ".qa"` e nome "Índice QA" por propriedade Gradle. Hoje o de QA substitui o de Produção (mesmo `dev.indice.app`). Fazer quando trocar de APK incomodar (decisão de 2026-10-20, 002).
 - "Esta e as próximas" numa ocorrência futura também apaga as ocorrências abertas entre hoje e ela (é "parar" da spec 001); talvez parar só a partir da data escolhida (`DELETE /recurrence-rules/:id?from=`).
 
 ## Bugs
