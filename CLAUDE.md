@@ -13,3 +13,11 @@ Os dois pacotes publicam `dist/` (`main`/`types` apontam para lá), nunca o `.ts
 Comandos: `npm run dev | test | typecheck | build`, `npm run db:migrate -- --name x`, `npm run db:deploy`, `npm run db:seed`. O `.env` da raiz é carregado por `packages/db/src/env.ts` (API, seed); `POSTGRES_PORT` muda a porta do compose.
 
 Decisões e mapeamento do legado em `docs/analise-legado.md`. Não reintroduzir Supabase nem Telegram.
+
+Features novas têm spec em `.claude/specs/` (fluxo spec-driven); o banco documentado para specs fica em `.claude/specs/schema.md`.
+
+**Definição de Pronto (vale para toda WP):**
+- `npm run typecheck`, `npm run test` e `npm run build` passam (é o que o CI roda).
+- Regra de negócio nova vira módulo puro em `apps/api/src/modules/**` com teste vitest ao lado.
+- Mudou contrato em `packages/shared` → `Dto.kt` atualizado. Tocou o Android → `./gradlew :app:assembleDebug` passa.
+- Mudou o banco → migração versionada e `.claude/specs/schema.md` atualizados no mesmo commit.
