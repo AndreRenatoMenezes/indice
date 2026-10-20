@@ -10,6 +10,7 @@ virar feature, o Spec Architect abre uma spec.
 - "Esta e as próximas" numa ocorrência futura também apaga as ocorrências abertas entre hoje e ela (é "parar" da spec 001); talvez parar só a partir da data escolhida (`DELETE /recurrence-rules/:id?from=`).
 
 ## Bugs
+- Web (`indice-web`) é pública e sem login: a chave fica no servidor, então qualquer um com a URL vê e altera os dados. Com QA (002) vira duas URLs.
 - No celular a página inteira estoura a largura (~680 px num aparelho de 412): o `Nav` (6 links em linha + data) e o `px-12` do layout não encolhem — vale para todas as páginas, não só a Semana.
 - Diário (`app/page.tsx`): entrada migrada aparece com • e sem riscado — o botão de concluir só distingue DONE; a Semana mostra › (mesmo dado).
 
