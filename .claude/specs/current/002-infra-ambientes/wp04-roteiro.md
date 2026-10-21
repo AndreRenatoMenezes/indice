@@ -37,6 +37,7 @@ politica_ok() {
   python3 -I -c '
 import json, sys
 d = json.load(open(sys.argv[1]))
+d = {} if d is None else d   # gcloud imprime null sem os campos; não-objeto continua falhando
 p = d.get("cleanupPolicies") or {}
 keep = p.get("manter-10-recentes", {}).get("mostRecentVersions", {})
 ok = (set(p) == {"apagar-antigas", "manter-10-recentes"}
@@ -49,6 +50,7 @@ sys.exit(0 if ok else 1)
 # Host direto do compute read_write de uma branch Neon (pelo nome). Só metadados:
 # não lê senha nem connection string.
 neon_branch_id() {
+  setopt localoptions pipefail   # rc do neonctl não some atrás do python
   neonctl branches list --project-id "$NEON_PROJECT_ID" --output json | python3 -I -c '
 import json, sys
 d = json.load(sys.stdin)
@@ -56,16 +58,31 @@ d = d.get("branches", d) if isinstance(d, dict) else d
 print(next((b["id"] for b in d if b.get("name") == sys.argv[1]), ""))
 ' "$1"
 }
+# neonctl >= 8 não tem `endpoints list`: lê a API (GET, só metadados). Falha para o
+# lado seguro: JSON fora do formato, nenhum ou mais de um compute read_write na
+# branch, ou host vazio -> não imprime nada e retorna 1 (o gate do Passo 7 exige host).
 neon_host() {
-  local id; id=$(neon_branch_id "$1"); [[ -n $id ]] || return 1
-  neonctl endpoints list --project-id "$NEON_PROJECT_ID" --output json | python3 -I -c '
+  setopt localoptions pipefail   # rc do neonctl não some atrás do python
+  local id; id=$(neon_branch_id "$1") || return 1; [[ -n $id ]] || return 1
+  neonctl api "/projects/$NEON_PROJECT_ID/endpoints" </dev/null | python3 -I -c '
 import json, sys
-d = json.load(sys.stdin)
-d = d.get("endpoints", d) if isinstance(d, dict) else d
-print(next((e["host"] for e in d if e.get("branch_id") == sys.argv[1] and e.get("type") == "read_write"), ""))
+try:
+    d = json.load(sys.stdin)["endpoints"]
+    hosts = [e["host"] for e in d if e["branch_id"] == sys.argv[1] and e["type"] == "read_write"]
+except Exception:
+    sys.exit(1)
+if len(hosts) != 1 or not isinstance(hosts[0], str) or not hosts[0]:
+    sys.exit(1)
+print(hosts[0])
 ' "$id"
 }
 ```
+
+> **Desvio aprovado pelo Luke em 2026-10-21 (execução da WP04, Obi):** o neonctl 8.10.1
+> não tem `endpoints list`; `neon_host` passou a ler `neonctl api /projects/<id>/endpoints`.
+> Também: `neonctl projects list` exige `--org-id` (senão abre prompt), e o `branches
+> create` do Passo 6 leva `--no-secrets` (o padrão imprime a connection string).
+> Registro em `bloqueios.md`. Revisão da função: Ahsoka.
 
 ---
 
@@ -197,14 +214,14 @@ grep -q -- '--parent' "$PROVAS/05-prova-c.txt" && print "PROVA_C=ok" || print "P
 - **Comando:**
 
 ```zsh
-neonctl projects list
+neonctl projects list --org-id '<id da organização Neon>'
 NEON_PROJECT_ID='id do projeto do Índice, da lista acima'
 neonctl branches list --project-id "$NEON_PROJECT_ID"
 NEON_MAIN='nome da branch principal, a que a Produção usa'
 neonctl branches create --help > "$PROVAS/06-help-create.txt" 2>&1
 neonctl branches delete --help > "$PROVAS/06-help-delete.txt" 2>&1
 grep -i -E 'parent|compute|suspend' "$PROVAS/06-help-create.txt"
-neonctl branches create --project-id "$NEON_PROJECT_ID" --name qa --parent "$NEON_MAIN"
+neonctl branches create --project-id "$NEON_PROJECT_ID" --name qa --parent "$NEON_MAIN" --no-secrets
 QA_BRANCH_ID=$(neon_branch_id qa); MAIN_BRANCH_ID=$(neon_branch_id "$NEON_MAIN")
 neonctl branches list --project-id "$NEON_PROJECT_ID" | tee "$PROVAS/06-neon-branch.txt"
 print "qa=$QA_BRANCH_ID principal=$MAIN_BRANCH_ID" | tee -a "$PROVAS/06-neon-branch.txt"
@@ -239,31 +256,142 @@ print "qa=$QA_BRANCH_ID principal=$MAIN_BRANCH_ID" | tee -a "$PROVAS/06-neon-bra
   (host com `-pooler`) acrescentando `pgbouncer=true&connection_limit=1` (com `&` se a
   URL já tiver `?`, senão com `?`), e a **direta** (host sem `-pooler`). Não cole em
   arquivo, nota ou chat.
+- **7.0 Execução pelo agente (desvio aprovado pelo Luke em 2026-10-21):** o usuário
+  **não digita mais segredo no Passo 7** (a frase do Passo 8 continua sendo dele). O
+  prompt sem eco do `security add-generic-password -w` (readpassphrase) corta em 128
+  caracteres, e as URLs da `qa` têm 137 (direta) e 144 (pooler). O agente grava as duas
+  no Keychain direto do `neonctl`, por pipe para o modo interativo do `security`
+  (stdin): nada em argv, arquivo, clipboard ou tela, e o `security -i` não grava
+  histórico. Itens antigos são apagados antes. Revisão da Ahsoka (2026-10-21) aplicada:
+  `nounset`/`pipe_fail`/`err_exit`; URL só segue se o `neonctl` saiu 0 e ela não é vazia
+  nem tem caractere de controle; `\` e `"` escapados para o tokenizador do `security -i`;
+  `delete` só aceita rc 0 ou 44 (não encontrado); trap em EXIT/INT/TERM apaga os **dois**
+  itens em qualquer falha (item parcial incluso) e confirma ausência.
+
+```zsh
+setopt err_exit nounset pipe_fail
+KC_ACCOUNT=indice-wp04
+KC_ITENS=(indice-wp04-qa-pooler-url indice-wp04-qa-direct-url)
+kc_existe() { security find-generic-password -a $KC_ACCOUNT -s $1 >/dev/null 2>&1; }
+apagar_kc() {   # rc do delete: 0 = apagado, 44 = não encontrado; outro = erro
+  local s rc falhou=0
+  for s in $KC_ITENS; do
+    rc=0; security delete-generic-password -a $KC_ACCOUNT -s $s >/dev/null 2>&1 || rc=$?
+    if (( rc != 0 && rc != 44 )); then print "keychain $s: ERRO no delete (rc=$rc)"; falhou=1; fi
+    if kc_existe $s; then print "keychain $s: AINDA EXISTE"; falhou=1
+    else print "keychain $s: ausente (confirmado)"; fi
+  done
+  return $falhou
+}
+OK=0
+limpar() { unset POOLER_URL DIRECT_URL; (( OK )) || { print "GRAVACAO=falhou"; apagar_kc || true; }; }
+trap limpar EXIT
+trap 'exit 130' INT TERM
+apagar_kc >/dev/null || { print "itens antigos não saíram do Keychain"; exit 1; }
+url_neon() {    # exit 0, não vazia; newline final aparado pelo $(...), interno ou outro controle = recusa
+  local u
+  u=$(neonctl cs qa --project-id "$NEON_PROJECT_ID" "$@" </dev/null 2>/dev/null) || return 1
+  [[ -n $u && $u != *[[:cntrl:]]* ]] || return 1
+  print -rn -- "$u"
+}
+esc() { local v=$1; v=${v//\\/\\\\}; v=${v//\"/\\\"}; print -rn -- "$v"; }
+POOLER_URL=$(url_neon --pooled) || { print "neonctl cs --pooled falhou ou URL inválida"; exit 1; }
+POOLER_URL="${POOLER_URL}&pgbouncer=true&connection_limit=1"
+DIRECT_URL=$(url_neon) || { print "neonctl cs falhou ou URL inválida"; exit 1; }
+{ printf 'add-generic-password -U -a %s -s %s -w "%s"\n' $KC_ACCOUNT ${KC_ITENS[1]} "$(esc "$POOLER_URL")"
+  printf 'add-generic-password -U -a %s -s %s -w "%s"\n' $KC_ACCOUNT ${KC_ITENS[2]} "$(esc "$DIRECT_URL")"
+} | security -i >/dev/null 2>&1
+[[ $(security find-generic-password -a $KC_ACCOUNT -s ${KC_ITENS[1]} -w 2>/dev/null) == "$POOLER_URL" ]] \
+  || { print "item pooler ausente ou diferente"; exit 1; }
+[[ $(security find-generic-password -a $KC_ACCOUNT -s ${KC_ITENS[2]} -w 2>/dev/null) == "$DIRECT_URL" ]] \
+  || { print "item direto ausente ou diferente"; exit 1; }
+OK=1
+```
+
+  Depois, num processo novo (fase A), as duas linhas `read -rs` abaixo são substituídas
+  por `POOLER_URL=$(security find-generic-password -a indice-wp04 -s indice-wp04-qa-pooler-url -w)`
+  e o equivalente para a direta. O gate compara cada URL, em memória, com a saída atual
+  do `neonctl cs` (igualdade e comprimento > 128). **Limpeza do Keychain (`apagar_kc`,
+  com confirmação de ausência):** em qualquer falha do gate 7 ou do 8.1 e em Ctrl-C (trap
+  EXIT/INT/TERM na fase A, que só mantém os itens se terminar ok); e **sempre** no fim da
+  fase B (Passo 8), inclusive com gate 8 falho, bootstrap abortado ou Ctrl-C.
 - **Comando:**
 
 ```zsh
-QA_HOST=$(neon_host qa); MAIN_HOST=$(neon_host "$NEON_MAIN")
-QA_POOLER_HOST="${QA_HOST%%.*}-pooler.${QA_HOST#*.}"
-MAIN_POOLER_HOST="${MAIN_HOST%%.*}-pooler.${MAIN_HOST#*.}"
 read -rs 'POOLER_URL?URL pooler da qa (com pgbouncer=true&connection_limit=1): '; print
 read -rs 'DIRECT_URL?URL direta da qa: '; print
+falha() { print "$1"; GATE_P7=falhou; return 1; }   # na execução manual só avisa
+# Gate 7. Seguro com err_exit (fase A) ou sem: nenhum teste roda solto (cada um é `[[ ]] && ok || falhou`).
+# Cada fonte externa (neon_host, neonctl cs) tem o rc capturado ANTES de o stdout ser aceito;
+# rc != 0 descarta o valor (vazio) e as condições que dependem dele saem falhou. A saída do
+# neonctl é usada inteira (sem head): o $(...) apara só o newline final, e mais de uma linha
+# deixa de ser igual à URL gravada. Diagnóstico antigo é apagado antes; falha ao escrever o
+# novo invalida o gate.
+rm -f "$PROVAS/07-gate-diagnostico.txt" "$PROVAS/07-gate-hosts.txt" || falha "não consegui apagar o diagnóstico antigo"
+captura() {   # $1 = variável de destino; resto = comando
+  local __out __rc=0
+  __out=$("${@:2}") || __rc=$?
+  (( __rc == 0 )) || __out=
+  typeset -g "$1=$__out"
+}
+captura QA_HOST      neon_host qa
+captura MAIN_HOST    neon_host "$NEON_MAIN"
+captura FRESH_DIRECT neonctl cs qa --project-id "$NEON_PROJECT_ID"
+captura FRESH_POOLER neonctl cs qa --project-id "$NEON_PROJECT_ID" --pooled
+unset -f captura
+[[ -n $FRESH_POOLER ]] && FRESH_POOLER="${FRESH_POOLER}&pgbouncer=true&connection_limit=1"
+QA_POOLER_HOST="${QA_HOST%%.*}-pooler.${QA_HOST#*.}"
+MAIN_POOLER_HOST="${MAIN_HOST%%.*}-pooler.${MAIN_HOST#*.}"
 # Host = entre o @ e a próxima / ou :. Nada é impresso.
 h=${POOLER_URL#*@}; h=${h%%/*}; POOLER_HOST=${h%%:*}
 h=${DIRECT_URL#*@}; h=${h%%/*}; DIRECT_HOST=${h%%:*}; unset h
+nl=$'\n'
 GATE_P7=falhou
-if [[ -n $QA_HOST && -n $MAIN_HOST && "$QA_HOST" != "$MAIN_HOST" \
-   && "$DIRECT_HOST" == "$QA_HOST" && "$POOLER_HOST" == "$QA_POOLER_HOST" \
-   && "$DIRECT_HOST" != "$MAIN_HOST" && "$POOLER_HOST" != "$MAIN_POOLER_HOST" \
-   && "$POOLER_URL" == *pgbouncer=true* && "$POOLER_URL" == *connection_limit=1* \
-   && "$DIRECT_URL" != *-pooler* ]]; then GATE_P7=ok; fi
+if ! {
+  [[ -n $QA_HOST && -n $MAIN_HOST ]]                             && print hosts_neon_lidos=ok       || print hosts_neon_lidos=falhou
+  [[ -n $QA_HOST && "$QA_HOST" != "$MAIN_HOST" ]]                && print qa_diferente_principal=ok || print qa_diferente_principal=falhou
+  [[ "$POOLER_URL" == postgres(|ql)://*@* ]]                     && print formato_pooler=ok         || print formato_pooler=falhou
+  [[ "$DIRECT_URL" == postgres(|ql)://*@* ]]                     && print formato_direta=ok         || print formato_direta=falhou
+  [[ "$POOLER_URL" != *$nl* ]]                                   && print pooler_uma_linha=ok       || print pooler_uma_linha=falhou
+  [[ "$DIRECT_URL" != *$nl* ]]                                   && print direta_uma_linha=ok       || print direta_uma_linha=falhou
+  [[ "$POOLER_URL" == *\?* ]]                                    && print pooler_tem_query=ok       || print pooler_tem_query=falhou
+  [[ "$DIRECT_URL" == *\?* ]]                                    && print direta_tem_query=ok       || print direta_tem_query=falhou
+  [[ -n $QA_HOST && "$DIRECT_HOST" == "$QA_HOST" ]]              && print direta_host_qa=ok         || print direta_host_qa=falhou
+  [[ -n $QA_HOST && "$POOLER_HOST" == "$QA_POOLER_HOST" ]]       && print pooler_host_qa_pooler=ok  || print pooler_host_qa_pooler=falhou
+  [[ -n $MAIN_HOST && "$DIRECT_HOST" != "$MAIN_HOST" ]]          && print direta_nao_principal=ok   || print direta_nao_principal=falhou
+  [[ -n $MAIN_HOST && "$POOLER_HOST" != "$MAIN_POOLER_HOST" ]]   && print pooler_nao_principal=ok   || print pooler_nao_principal=falhou
+  [[ "$POOLER_URL" == *pgbouncer=true* ]]                        && print pgbouncer_true=ok         || print pgbouncer_true=falhou
+  [[ "$POOLER_URL" == *connection_limit=1* ]]                    && print connection_limit_1=ok     || print connection_limit_1=falhou
+  [[ "$DIRECT_URL" != *-pooler* ]]                               && print direta_sem_pooler=ok      || print direta_sem_pooler=falhou
+  [[ -n $FRESH_POOLER && "$POOLER_URL" == "$FRESH_POOLER" ]]     && print pooler_igual_neon=ok      || print pooler_igual_neon=falhou
+  [[ -n $FRESH_DIRECT && "$DIRECT_URL" == "$FRESH_DIRECT" ]]     && print direta_igual_neon=ok      || print direta_igual_neon=falhou
+  (( ${#POOLER_URL} > 128 && ${#POOLER_URL} == ${#FRESH_POOLER} )) && print pooler_comprimento=ok   || print pooler_comprimento=falhou
+  (( ${#DIRECT_URL} > 128 && ${#DIRECT_URL} == ${#FRESH_DIRECT} )) && print direta_comprimento=ok   || print direta_comprimento=falhou
+} > "$PROVAS/07-gate-diagnostico.txt"; then
+  print "não consegui gravar 07-gate-diagnostico.txt: gate invalidado"
+  rm -f "$PROVAS/07-gate-diagnostico.txt"
+else
+  cat "$PROVAS/07-gate-diagnostico.txt"
+  [[ $(grep -c '=ok$' "$PROVAS/07-gate-diagnostico.txt" || true) -eq 19 ]] \
+    && ! grep -q '=falhou$' "$PROVAS/07-gate-diagnostico.txt" && GATE_P7=ok
+fi
+unset nl FRESH_POOLER FRESH_DIRECT
 print "GATE_P7=$GATE_P7" | tee "$PROVAS/07-gate-hosts.txt"
 ```
+
+> **Desvio aprovado pelo Luke em 2026-10-21 (segunda tentativa do gate 7):** a primeira
+> tentativa falhou sem dizer qual condição. O gate agora grava ok/falhou por condição,
+> com as mesmas condições de antes, mais cinco que só apertam (formato `postgres://…@`, `?` de query string e
+> uma linha em cada URL). Nenhuma condição foi afrouxada. Na execução pelo agente, as
+> URLs vêm do Keychain (itens `indice-wp04-qa-pooler-url` e `indice-wp04-qa-direct-url`)
+> em vez de `read -rs`.
 
 - **Saída esperada:** `GATE_P7=ok`. Allowlist: o host direto tem de ser **exatamente**
   o do compute da `qa`, e o pooler exatamente o mesmo com `-pooler`; nenhum dos dois
   pode ser o da principal.
 - **Prova:** `07-gate-hosts.txt` (só o resultado do gate).
-- **Desfazer:** com `GATE_P7=falhou`, `unset POOLER_URL DIRECT_URL` e recopie do console
+- **Desfazer:** com `GATE_P7=falhou`, `unset POOLER_URL DIRECT_URL`, `apagar_kc` (execução pelo
+  agente: automático, com ausência confirmada) e recopie do console
   (provavelmente a branch errada no *Connect*). Se uma URL vazou, troque a senha do
   papel do banco da `qa` no console do Neon e recopie.
 - **Risco:** **URL da principal num secret de QA faria QA, e a migração do primeiro
@@ -287,21 +415,34 @@ print "GATE_P7=$GATE_P7" | tee "$PROVAS/07-gate-hosts.txt"
 
 ```zsh
 gcloud artifacts repositories describe indice --location "$REGION" \
-  --format='json(cleanupPolicies,cleanupPolicyDryRun)' > "$PROVAS/08-antes-indice.json"
-python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); print("politicas_antes=%d dry_run_antes=%s" % (len(d.get("cleanupPolicies") or {}), d.get("cleanupPolicyDryRun", False)))' \
-  "$PROVAS/08-antes-indice.json" | tee "$PROVAS/08-antes-resumo.txt"
-# indice-qa: se já existir, a política dele também precisa estar vazia
-gcloud artifacts repositories describe indice-qa --location "$REGION" \
-  --format='json(cleanupPolicies,cleanupPolicyDryRun)' > "$PROVAS/08-antes-indice-qa.json" 2>/dev/null \
-  || print '{}' > "$PROVAS/08-antes-indice-qa.json"
-python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); print("politicas_antes_qa=%d" % len(d.get("cleanupPolicies") or {}))' \
-  "$PROVAS/08-antes-indice-qa.json" | tee -a "$PROVAS/08-antes-resumo.txt"
+  --format='json(cleanupPolicies,cleanupPolicyDryRun)' > "$PROVAS/08-antes-indice.json" || falha "describe indice"
+python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); d={} if d is None else d; print("politicas_antes=%d dry_run_antes=%s" % (len(d.get("cleanupPolicies") or {}), d.get("cleanupPolicyDryRun", False)))' \
+  "$PROVAS/08-antes-indice.json" | tee "$PROVAS/08-antes-resumo.txt" || falha "resumo indice"
+# indice-qa: só "não encontrado" é tolerado (vira {}); qualquer outro erro aborta.
+if ! err=$(gcloud artifacts repositories describe indice-qa --location "$REGION" \
+     --format='json(cleanupPolicies,cleanupPolicyDryRun)' 2>&1 > "$PROVAS/08-antes-indice-qa.json"); then
+  [[ $err == *(NOT_FOUND|not found|does not exist|was not found)* ]] || falha "describe indice-qa"
+  print '{}' > "$PROVAS/08-antes-indice-qa.json"
+fi
+unset err
+python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); d={} if d is None else d; print("politicas_antes_qa=%d" % len(d.get("cleanupPolicies") or {}))' \
+  "$PROVAS/08-antes-indice-qa.json" | tee -a "$PROVAS/08-antes-resumo.txt" || falha "resumo indice-qa"
+: > "$PROVAS/08-antes-imagens-prod.txt"
 for img in indice-api indice-web; do
   gcloud artifacts docker images list "$REGION-docker.pkg.dev/$PROJECT_ID/indice/$img" \
-    --include-tags --format='value(version,tags,createTime)' --sort-by=~createTime
-done > "$PROVAS/08-antes-imagens-prod.txt"
-gcloud run services describe indice-api --region "$REGION" \
-  --format='value(spec.template.spec.containers[0].image)' >> "$PROVAS/08-antes-imagens-prod.txt"
+    --include-tags --format='value(version,tags,createTime)' --sort-by=~createTime > "$PROVAS/08-antes-imagens-$img.txt" \
+    || falha "images list $img"
+  cat "$PROVAS/08-antes-imagens-$img.txt" >> "$PROVAS/08-antes-imagens-prod.txt"
+done
+API_IMG=$(gcloud run services describe indice-api --region "$REGION" \
+  --format='value(spec.template.spec.containers[0].image)') || falha "describe indice-api"
+WEB_IMG=$(gcloud run services describe indice-web --region "$REGION" \
+  --format='value(spec.template.spec.containers[0].image)') || falha "describe indice-web"
+[[ -n $API_IMG && -n $WEB_IMG ]] || falha "imagem em uso vazia"
+print -r -- "$API_IMG" >> "$PROVAS/08-antes-imagens-prod.txt"
+print -r -- "$WEB_IMG" >> "$PROVAS/08-antes-imagens-prod.txt"
+gcloud artifacts packages list --repository indice --location "$REGION" --format='value(name.basename())' \
+  > "$PROVAS/08-antes-pacotes-indice.txt" || falha "packages list"
 ```
 
   Esperado: `politicas_antes=0` e `politicas_antes_qa=0`. **Se algum for maior que 0,
@@ -315,18 +456,33 @@ gcloud run services describe indice-api --region "$REGION" \
 
 ```zsh
 SA_DEPLOY="gh-deployer@$PROJECT_ID.iam.gserviceaccount.com"
-PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
+PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)') || falha "projectNumber"
+[[ $PROJECT_NUMBER == <-> ]] || falha "projectNumber vazio ou inválido"
 BUILD_SA="$PROJECT_NUMBER-compute@developer.gserviceaccount.com"
 BUILD_BUCKET="gs://${PROJECT_ID}_cloudbuild"
-# Listagem: saída não vazia = existe; vazia = não encontrado; falha = repassa o erro.
+# Inventário: inv nunca falha, classifica cada linha em existia/ausente/erro; erro bloqueia abaixo.
 tem() { local o; o=$("$@") || return 2; [[ -n $o ]] || { print -u2 NOT_FOUND; return 1; }; }
+# Ausente só com mensagem de "não encontrado" (inclui "Cannot find" do run jobs) e sem
+# sinal de permissão/autenticação; qualquer outro erro vira erro e bloqueia o Passo 8.
 inv() { local nome=$1 err; shift
   if err=$("$@" 2>&1 >/dev/null); then print "$nome=existia"
-  elif [[ $err == *(NOT_FOUND|not found|does not exist|was not found)* ]]; then print "$nome=ausente"
+  elif [[ $err == *(PERMISSION_DENIED|UNAUTHENTICATED|[Pp]ermission|denied|forbidden|403)* ]]; then print "$nome=erro"
+  elif [[ $err == *(NOT_FOUND|not found|does not exist|was not found|Cannot find)* ]]; then print "$nome=ausente"
   else print "$nome=erro"; fi; }
-bind() { print "--flatten=bindings"
-         print "--filter=bindings.role=$1 AND bindings.members:serviceAccount:$SA_DEPLOY"
-         print "--format=value(bindings.role)"; }
+bind() { print -r -- "--flatten=bindings"
+         print -r -- "--filter=bindings.role=$1 AND bindings.members:serviceAccount:$SA_DEPLOY"
+         print -r -- "--format=value(bindings.role)"; }
+# `gcloud storage buckets get-iam-policy` não aceita --filter: lê o JSON da policy e
+# imprime o papel se a conta já o tem no bucket (vazio se não). rc do gcloud preservado.
+bucket_papel() {
+  setopt localoptions pipefail
+  gcloud storage buckets get-iam-policy "$1" --format=json | python3 -I -c '
+import json, sys
+p = json.load(sys.stdin)
+p = {} if p is None else p
+print(next((b["role"] for b in p.get("bindings", []) if b.get("role") == sys.argv[1] and sys.argv[2] in b.get("members", [])), ""))
+' "$2" "serviceAccount:$SA_DEPLOY"
+}
 {
   inv wif_pool          gcloud iam workload-identity-pools describe github --location global
   inv wif_provider      gcloud iam workload-identity-pools providers describe github-oidc --location global --workload-identity-pool github
@@ -342,12 +498,19 @@ bind() { print "--flatten=bindings"
     inv "bind_projeto_${role#roles/}" tem gcloud projects get-iam-policy "$PROJECT_ID" ${(f)"$(bind $role)"}
   done
   inv bind_build_sa_user tem gcloud iam service-accounts get-iam-policy "$BUILD_SA" ${(f)"$(bind roles/iam.serviceAccountUser)"}
-  inv bind_bucket_admin  tem gcloud storage buckets get-iam-policy "$BUILD_BUCKET" ${(f)"$(bind roles/storage.admin)"}
+  inv bind_bucket_admin  tem bucket_papel "$BUILD_BUCKET" roles/storage.admin
   for api in iam iamcredentials sts; do
     inv "api_$api" tem gcloud services list --enabled --filter="config.name=$api.googleapis.com" --format='value(config.name)'
   done
-} | tee "$PROVAS/08-inventario-antes.txt"
-print "inventario: $(grep -c -E '=(existia|ausente)$' "$PROVAS/08-inventario-antes.txt") de 21 linhas válidas, $(grep -c '=erro$' "$PROVAS/08-inventario-antes.txt") erro(s)"
+} | tee "$PROVAS/08-inventario-antes.txt" || falha "inventário (tee)"
+# grep -c sai 1 quando conta 0; o número continua certo.
+VALIDAS=$(grep -c -E '=(existia|ausente)$' "$PROVAS/08-inventario-antes.txt" || true)
+ERROS=$(grep -c '=erro$' "$PROVAS/08-inventario-antes.txt" || true)
+print "inventario: $VALIDAS de 21 linhas válidas, $ERROS erro(s)"
+
+grep -q '^politicas_antes=0 ' "$PROVAS/08-antes-resumo.txt" || falha "politicas_antes > 0"
+grep -qx 'politicas_antes_qa=0' "$PROVAS/08-antes-resumo.txt" || falha "politicas_antes_qa > 0"
+[[ $VALIDAS -eq 21 && $ERROS -eq 0 ]] || falha "inventário"
 ```
 
   Esperado: `inventario: 21 de 21 linhas válidas, 0 erro(s)`. Num primeiro
