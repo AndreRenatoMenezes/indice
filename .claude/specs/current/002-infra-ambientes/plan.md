@@ -62,10 +62,66 @@ Delta sobre o que existe. Banco (`schema.md`) não muda: nenhuma migração nest
 | WP04 Provisionar (execução externa) | Usuário (ou DevOps com autorização explícita) | nenhum arquivo | Branch Neon `qa` filha da principal; rodar `bootstrap.sh`; gravar valores dos secrets de QA; seed + rekey de QA; criar *variables* do repo (`GCP_PROJECT_ID`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA`). **Provas exigidas:** (a) `gcloud artifacts repositories describe` de `indice` e `indice-qa` mostra as duas regras e `cleanupPolicyDryRun` falso/ausente, igual ao valor final que o `bootstrap.sh` imprimiu; rodar o `bootstrap.sh` de novo não altera isso; (b) `gcloud builds submit` sem `_TAG` falha antes de qualquer `docker push` (se o Cloud Build aceitar `_TAG` vazia, o `cloudbuild.yaml` ganha um primeiro passo que aborta com `_TAG` vazia, e a prova é refeita); (c) `neonctl branches reset --help` na versão instalada lista `--parent`; (d) `bootstrap.sh` com `<email-usuario-app>` diferente do da Produção aborta; (e) `gcloud projects get-iam-policy` mostra para `gh-deployer` só `cloudbuild.builds.editor`, `logging.viewer`, `serviceusage.serviceUsageConsumer` e `indiceBucketLister` no projeto (nenhum `storage.admin`/`storage.objectAdmin` em nível de projeto), e `gcloud iam roles describe indiceBucketLister` lista só `storage.buckets.list` | WP02, WP03 |
 | WP05 Proteção e Environments | Git Master (Chewie) | config do GitHub | Proteção de `development` e `main`: PR obrigatório, checks `node`+`android`, sem force push, sem deleção, **"Do not allow bypassing" ligado** (vale para admin), revisão obrigatória desligada; Environments `qa` (só `development`) e `production` (só `main`, revisor obrigatório: Andre); branch padrão continua `main`. Depois, apagar `prev` se o Andre autorizar | WP03 mergeado (checks existirem); autorização do usuário |
 | WP06 Aceite | Reviewer (Ahsoka) | nenhum | Roda os critérios da spec: ordem de `prev`, PR feat → development (QA sobe), 403 anônimo na web de QA e acesso pelo proxy, migração de teste em QA e não em Prod, PR development → main com deploy pendente até aprovação, 401 cruzado das chaves (também após `qa-reset.sh`), busca de segredos no repo. **Provas exigidas:** (a) primeira execução real do `qa-reset.sh` (logo após o primeiro deploy de QA, quando a cópia ainda não tem nada só de QA) termina sem erro, com `neonctl branches reset --parent` aplicado (data de reset da branch `qa` no Neon atualizada); (b) depois dele, `/habits/today` com a chave de QA devolve os dados copiados e `User` em `qa` tem a mesma contagem da Produção; (c) a imagem atual de `indice-api`/`indice-web` está no repositório `indice` e nenhuma imagem de QA foi para ele | WP04, WP05 |
+| WP07 Primeira promoção | Git Master (Chewie) + usuário (aprovação) + Reviewer (Ahsoka) | nenhum arquivo | PR `development` → `main` mergeado, deploy pendente no Environment `production` aprovado pelo Andre; prova os critérios de Produção (ver "Plano de aceite") | WP06; autorização do usuário |
 
-Ordem: WP00 → (WP01 ∥ WP02) → WP03 → WP04 → WP05 → WP06. WP01–WP03 são um dono só (DevOps), então sem conflito de arquivo. `CLAUDE.md` ganha uma linha sobre o fluxo de branches — dono a definir pelo Maestro (sugiro o DevOps, junto da WP01).
+Ordem: WP00 → (WP01 ∥ WP02) → WP03 → WP04 → WP05 → WP06 → WP07. WP01–WP03 são um dono só (DevOps), então sem conflito de arquivo. `CLAUDE.md` ganha uma linha sobre o fluxo de branches — dono a definir pelo Maestro (sugiro o DevOps, junto da WP01).
 
 Nada de deploy, criação de recurso pago, proteção de branch ou merge sem autorização explícita do usuário (regra da equipe).
+
+## Plano de aceite (WP06 e WP07, 2026-10-21)
+
+Executores: **Obi** escreve no GCP/Neon de QA; **Chewie** faz git/PR; **Ahsoka** só lê e registra evidência; **Andre** roda o que exige credencial dele ou clique dele. Nenhuma prova da WP06 escreve em Produção.
+
+**Guarda global da WP06.** Antes do primeiro passo e depois do último, Ahsoka registra: revisão servindo de `indice-api` e `indice-web` (nome e imagem) e `SELECT count(*) FROM _prisma_migrations` na branch principal do Neon (só leitura). Os dois registros têm de ser iguais; se diferirem, a WP06 para e vira bloqueio.
+
+**Leitura de Produção** (contagens, `_prisma_migrations`, `/habits/today` com a chave de Produção) é só leitura e mostra só números: contagem de linhas, `length` da resposta e nome de migração. Nenhum dado pessoal vai para tela, log ou nota. URLs e chaves são lidas do Secret Manager dentro do comando, sem eco.
+
+### (a) Já tem evidência (WP04/WP05) — Ahsoka só anexa
+
+| Critério da spec | Evidência |
+|---|---|
+| Chaves cruzadas (antes do reset) | 200/401 em QA, 200/401 em Produção |
+| Web de QA privada (403 anônimo) | evidência da WP04 |
+| Imagens em repositórios separados, política efetiva | PROVA_A e a prova de que o repositório `indice` não tem imagem de QA |
+| Build sem `_TAG` falha antes de publicar | PROVA_B |
+| Provas (c)–(e) da WP04 | PROVA_C–PROVA_E |
+| Merge em `development` publica QA | deploy automático SUCCESS do PR #8 |
+| `prev` antes do primeiro PR | WP00 (PR #6) |
+
+### (b) WP06 — falta provar em QA, nesta ordem
+
+| # | Prova | Executor | Escreve em | Reversível | Autorização |
+|---|---|---|---|---|---|
+| 1 | **Leituras de configuração.** (i) Proteção de `development` e `main` lida de volta: PR obrigatório, checks `node`+`android`, `enforce_admins`/sem bypass, sem force push nem deleção. Isso vale como prova do "botão bloqueado"; ninguém abre PR vermelho de propósito. (ii) Push recusado: a proteção de `main` é idêntica à da branch-espelho onde o push foi recusado (diff do JSON). (iii) Environment `production` com política de branch só `main` e revisor Andre; `qa` só `development`. (iv) Provider WIF com `attribute-condition` do repositório. Lido de volta, sem token de outro repositório. (v) A imagem da revisão atual de `indice-api-qa`/`indice-web-qa` tem tag = SHA do merge do PR #8. (vi) `git grep` de `postgresql://`, `private_key`, `BEGIN PRIVATE KEY` e dos hashes/prefixos das chaves no `HEAD` de `development` dá zero fora de placeholders. (vii) O README cobre os tópicos do critério. (viii) `prev`: se foi apagada, existe autorização registrada | Ahsoka | nada | — | não |
+| 2 | **Falha de migração antes do deploy.** De um branch local **não publicado**, com uma migração `aceite_002_falha` contendo só `SELECT 1/0;`, Obi roda `gcloud builds submit` com as substituições de QA copiadas do `deploy.yml` (`_SUFFIX=-qa`, `_REPO=indice-qa`, secrets `indice-qa-*`, `_TAG=<sha local>`). Ahsoka confere o comando antes de rodar. Esperado: build FAILURE no passo de migração; revisões de `indice-api-qa`/`indice-web-qa` iguais às de antes; `/health` de QA 200. Limpeza: `indice-migrate-qa` executado com `--args` de `prisma migrate resolve --rolled-back <nome>`; `prisma migrate status` em QA limpo. O branch local é descartado. É o único jeito de testar sem merge, porque o CI roda `migrate deploy` e barraria a migração antes (primeira barreira, também registrada) | Obi | QA: uma imagem a mais em `indice-qa`, uma linha falha em `_prisma_migrations` de QA, removida na limpeza | sim | **sim** (escrita manual em QA fora do pipeline) |
+| 3 | **Migração de teste só em QA.** PR `feat/002-aceite-migracao` → `development` com a migração `aceite_002_noop` (só `SELECT 1;`, sem mudança de schema; `schema.md` não muda). O merge dispara o deploy de QA. Esperado: deploy SUCCESS; `aceite_002_noop` em `_prisma_migrations` de QA e **ausente** na principal; tag = SHA do merge. A migração fica para sempre e será a prova da WP07 | Chewie (PR), Ahsoka (leitura) | QA (deploy); `development` (commit) | o commit sim (revert); a linha em `_prisma_migrations` não, mas é inócua | **sim** (merge) |
+| 4 | **Reset real de QA.** Andre roda `infra/cloudrun/qa-reset.sh` **no próprio terminal**, porque o script lê `NEON_API_KEY` do ambiente e pede confirmação interativa, o que não funciona no shell de agente. Antes, Ahsoka confere que `NEON_BRANCH` resolve para a branch `qa`, não a principal (o script já recusa `main`/`production`; a principal não tem pai, então `reset --parent` nela falha). Esperado: script sem erro; o horário do último reset da branch `qa` no Neon (`neonctl branches get qa`) é posterior ao início do passo; `aceite_002_noop` de volta em `_prisma_migrations` de QA (prova de que as migrações de `development` foram reaplicadas); `ApiKey` em QA com uma linha só | Andre (executa), Obi (apoio), Ahsoka (leitura) | QA (apaga a cópia e recopia) | QA sim (é recópia, e o Neon guarda histórico para restaurar); Produção não é escrita | **sim** (destrutivo em QA, credencial do usuário) |
+| 5 | **Depois do reset.** (i) Chaves cruzadas de novo: QA 200 com a chave de QA e 401 com a de Produção; Produção 200 com a de Produção e 401 com a de QA. (ii) `/habits/today` com a chave de QA dá 200 e o mesmo `length` que `/habits/today` da Produção com a chave de Produção, no mesmo dia. (iii) `count(*)` de `User` em QA igual ao da Produção; o mesmo para `Habit`. Os números só batem se o seed não criou usuário novo. (iv) Pelo `gcloud run services proxy indice-web-qa`, Andre confirma que a página carrega com dados, sem captura de tela no repositório | Ahsoka (i–iii), Andre (iv) | nada | — | não |
+
+### (c) WP07 — primeira promoção `development` → `main`
+
+A WP07 fecha os critérios de Produção:
+- o deploy de `main` fica pendente até a aprovação do Andre e, sem aprovação, nada muda;
+- a migração mergeada aparece na Produção só depois do merge em `main`, provada com `aceite_002_noop`;
+- depois do deploy, a revisão de Produção usa a tag = SHA do merge e as chaves cruzadas na Produção continuam dando 200/401.
+
+Não cabe na WP06 porque a promoção publica em Produção tudo o que está em `development` desde `de4c007`: a 001 (lista semanal) inteira, a 002 e a `aceite_002_noop`. Isso é um release de produto, com autorização própria do usuário.
+
+**Pode ficar como primeira promoção real**, e deve vir logo depois da WP06. Riscos de adiar:
+- `main` não tem os workflows da 002, então um `hotfix/*` aberto de `main` hoje não faz deploy automático. Até a WP07, hotfix volta ao deploy manual documentado.
+- O caminho de deploy de Produção pelo Actions só fica provado nesse momento.
+
+Sobre `main` não ter os workflows: no `push` do merge, o GitHub usa os workflows do commit mergeado, então o `deploy.yml` roda já na promoção.
+
+Passos da WP07, nesta ordem:
+1. Ahsoka lista o delta de migrações entre `main` e `development`. Hoje só a `aceite_002_noop`; se houver outra, confere se é só de expandir.
+2. Obi cria uma branch Neon de segurança da principal (`pre-promocao-<data>`), só leitura da principal. Ela é apagada só com OK do Andre depois de 7 dias de Produção estável.
+3. Chewie abre o PR `development` → `main` com CI verde e faz o merge com autorização.
+4. Ahsoka registra que o deploy está pendente e que a revisão de Produção não mudou durante a espera.
+5. Andre aprova no Environment `production`.
+6. Ahsoka verifica: deploy SUCCESS, tag = SHA, `aceite_002_noop` na principal, chaves cruzadas 200/401 em Produção, `/health` 200.
+
+Volta atrás: `gcloud run services update-traffic` para a revisão anterior; dados pela branch de segurança. Executor da aprovação: Andre. Escrita: Produção. Reversível: revisão sim; a migração é inócua. Autorização: **sim**, para o merge e para a aprovação.
 
 ## Riscos
 
