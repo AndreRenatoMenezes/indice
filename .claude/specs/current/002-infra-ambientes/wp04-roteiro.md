@@ -499,6 +499,8 @@ print(next((b["role"] for b in p.get("bindings", []) if b.get("role") == sys.arg
   done
   inv bind_build_sa_user tem gcloud iam service-accounts get-iam-policy "$BUILD_SA" ${(f)"$(bind roles/iam.serviceAccountUser)"}
   inv bind_bucket_admin  tem bucket_papel "$BUILD_BUCKET" roles/storage.admin
+  inv role_bucket_lister gcloud iam roles describe indiceBucketLister --project "$PROJECT_ID"
+  inv bind_projeto_bucket_lister tem gcloud projects get-iam-policy "$PROJECT_ID" ${(f)"$(bind projects/$PROJECT_ID/roles/indiceBucketLister)"}
   for api in iam iamcredentials sts; do
     inv "api_$api" tem gcloud services list --enabled --filter="config.name=$api.googleapis.com" --format='value(config.name)'
   done
@@ -506,14 +508,14 @@ print(next((b["role"] for b in p.get("bindings", []) if b.get("role") == sys.arg
 # grep -c sai 1 quando conta 0; o número continua certo.
 VALIDAS=$(grep -c -E '=(existia|ausente)$' "$PROVAS/08-inventario-antes.txt" || true)
 ERROS=$(grep -c '=erro$' "$PROVAS/08-inventario-antes.txt" || true)
-print "inventario: $VALIDAS de 21 linhas válidas, $ERROS erro(s)"
+print "inventario: $VALIDAS de 23 linhas válidas, $ERROS erro(s)"
 
 grep -q '^politicas_antes=0 ' "$PROVAS/08-antes-resumo.txt" || falha "politicas_antes > 0"
 grep -qx 'politicas_antes_qa=0' "$PROVAS/08-antes-resumo.txt" || falha "politicas_antes_qa > 0"
-[[ $VALIDAS -eq 21 && $ERROS -eq 0 ]] || falha "inventário"
+[[ $VALIDAS -eq 23 && $ERROS -eq 0 ]] || falha "inventário"
 ```
 
-  Esperado: `inventario: 21 de 21 linhas válidas, 0 erro(s)`. Num primeiro
+  Esperado: `inventario: 23 de 23 linhas válidas, 0 erro(s)`. Num primeiro
   provisionamento quase tudo sai `ausente` (as APIs podem sair `existia`; bucket e
   vínculo do bucket saem `ausente` se o bucket não existe). Qualquer `erro`: pare e
   avise o Luke. **Não edite o inventário à mão.**
@@ -524,7 +526,7 @@ read 'CONF?Imagens apagadas da Produção não voltam. Digite APLICAR-LIMPEZA-EM
 [[ $CONF == APLICAR-LIMPEZA-EM-PRODUCAO ]] && GATE_P8=ok || GATE_P8=falhou
 grep -q '^politicas_antes=0 ' "$PROVAS/08-antes-resumo.txt" || GATE_P8=falhou
 grep -qx 'politicas_antes_qa=0' "$PROVAS/08-antes-resumo.txt" || GATE_P8=falhou
-[[ $(grep -c -E '=(existia|ausente)$' "$PROVAS/08-inventario-antes.txt") -eq 21 ]] || GATE_P8=falhou
+[[ $(grep -c -E '=(existia|ausente)$' "$PROVAS/08-inventario-antes.txt") -eq 23 ]] || GATE_P8=falhou
 grep -q '=erro$' "$PROVAS/08-inventario-antes.txt" && GATE_P8=falhou
 print "GATE_P8=$GATE_P8" | tee "$PROVAS/08-gate.txt"
 ```
@@ -613,7 +615,10 @@ for role in roles/cloudbuild.builds.editor roles/logging.viewer roles/serviceusa
   se_criado "bind_projeto_${role#roles/}" gcloud projects remove-iam-policy-binding "$PROJECT_ID" \
     --member "serviceAccount:$SA_DEPLOY" --role "$role" --condition None
 done
-# 6. conta, provider, pool, bucket
+se_criado bind_projeto_bucket_lister gcloud projects remove-iam-policy-binding "$PROJECT_ID" \
+  --member "serviceAccount:$SA_DEPLOY" --role "projects/$PROJECT_ID/roles/indiceBucketLister" --condition None
+# 6. papel customizado, conta, provider, pool, bucket
+se_criado role_bucket_lister gcloud iam roles delete indiceBucketLister --project "$PROJECT_ID"   # ~37 dias reservado; "gcloud iam roles undelete" recupera
 se_criado sa_gh_deployer gcloud iam service-accounts delete "$SA_DEPLOY"
 se_criado wif_provider gcloud iam workload-identity-pools providers delete github-oidc \
   --location global --workload-identity-pool github
@@ -662,6 +667,43 @@ print "PROVA_A=$PROVA_A" | tee "$PROVAS/09-prova-a.txt"
 - **Desfazer:** nada (leitura e reaplicação idempotente).
 - **Risco:** com `PROVA_A=falhou`, abra os arquivos para ver qual condição caiu. Se for
   o dry-run, o PATCH do script falhou (desvio registrado em `bloqueios.md`): avise o Luke.
+
+## Passo 9e — Prova (e): papéis da `gh-deployer` no projeto [GATE]
+
+- **Objetivo:** provar que, no nível do projeto, a `gh-deployer` tem **só**
+  `cloudbuild.builds.editor`, `logging.viewer`, `serviceusage.serviceUsageConsumer` e o
+  papel customizado `indiceBucketLister` (nenhum `storage.admin`/`storage.objectAdmin`
+  de projeto), e que o papel customizado tem **só** `storage.buckets.list` e não está
+  apagado. Só leitura. Contexto: o primeiro deploy de QA deu 403 no bucket porque o
+  `gcloud builds submit` lista os buckets do projeto (anti name-squatting) e
+  `storage.buckets.list` só existe em nível de projeto (`plan.md`, emenda da Leia).
+- **Comando:**
+
+```zsh
+SA_DEPLOY="gh-deployer@$PROJECT_ID.iam.gserviceaccount.com"
+gcloud projects get-iam-policy "$PROJECT_ID" --flatten=bindings \
+  --filter="bindings.members:serviceAccount:$SA_DEPLOY" --format='value(bindings.role)' \
+  | sort > "$PROVAS/09e-papeis-projeto.txt"
+gcloud iam roles describe indiceBucketLister --project "$PROJECT_ID" \
+  --format='value(deleted,includedPermissions.list())' > "$PROVAS/09e-papel-lister.txt"
+esperado="projects/$PROJECT_ID/roles/indiceBucketLister
+roles/cloudbuild.builds.editor
+roles/logging.viewer
+roles/serviceusage.serviceUsageConsumer"
+PROVA_E=ok
+[[ $(<"$PROVAS/09e-papeis-projeto.txt") == "$esperado" ]] || PROVA_E=falhou
+[[ $(<"$PROVAS/09e-papel-lister.txt") == $'\tstorage.buckets.list' ]] || PROVA_E=falhou
+print "PROVA_E=$PROVA_E" | tee "$PROVAS/09e-prova-e.txt"
+```
+
+- **Saída esperada:** `PROVA_E=ok`. `09e-papeis-projeto.txt` com exatamente as quatro
+  linhas acima; `09e-papel-lister.txt` com campo `deleted` vazio e só
+  `storage.buckets.list`.
+- **Prova:** `09e-papeis-projeto.txt`, `09e-papel-lister.txt`, `09e-prova-e.txt`.
+- **Desfazer:** nada (leitura).
+- **Risco:** papel a mais (por exemplo `storage.admin` de projeto) ou a menos, ou papel
+  customizado com outra permissão: `PROVA_E=falhou`; avise o Luke antes de qualquer
+  deploy.
 
 ## Passo 10 — Variables do repositório GitHub [GATE]
 
@@ -743,6 +785,7 @@ grep -qx 'GATE_P8=ok'  "$PROVAS/08-gate.txt"        || PRE_MERGE=falhou
 grep -qx 'exit=0'      "$PROVAS/08-bootstrap-1.txt" || PRE_MERGE=falhou
 grep -qx 'PROVA_A=ok'  "$PROVAS/09-prova-a.txt"     || PRE_MERGE=falhou
 grep -qx 'GATE_P10=ok' "$PROVAS/10-gate.txt"        || PRE_MERGE=falhou
+grep -qx 'PROVA_E=ok'  "$PROVAS/09e-prova-e.txt"    || PRE_MERGE=falhou
 print "PRE_MERGE=$PRE_MERGE" | tee "$PROVAS/11-pre-merge.txt"
 ```
 
@@ -803,8 +846,11 @@ curl -s -o /dev/null -w 'health=%{http_code}\n' \
   as substituições de QA, então nem o pior caso toca Produção):
 
 ```zsh
-git clone --depth 1 --branch development "https://github.com/$GH_REPO.git" /tmp/indice-wp04
-cd /tmp/indice-wp04
+# Sem git (desvio aprovado em 2026-10-21): tarball público da development, só leitura.
+CLONE=~/indice-wp04-sessao/clone; mkdir -p "$CLONE"
+curl -fsSL "https://codeload.github.com/$GH_REPO/tar.gz/refs/heads/development" \
+  | tar -xz -C "$CLONE" --strip-components 1
+cd "$CLONE"
 QA_SUBS='_REPO=indice-qa,_SUFFIX=-qa,_WEB_AUTH=--no-allow-unauthenticated,_DB_SECRET=indice-qa-database-url,_DB_DIRECT_SECRET=indice-qa-database-url-direct,_API_KEY_SECRET=indice-qa-api-key'
 gcloud artifacts docker images list "$REGION-docker.pkg.dev/$PROJECT_ID/indice-qa" --include-tags \
   --format='value(package,tags)' > "$PROVAS/12-imagens-antes.txt"
@@ -852,7 +898,7 @@ cd ~/Documents/GitHub/indice
   criado e barrado no passo 0.
 - **Prova:** `12-prova-b.txt`, `12-*-submit.log`, `12-*-build-*.json` e `.log`,
   `12-imagens-{antes,depois}.txt`.
-- **Desfazer:** build falho não deixa recurso. `rm -rf /tmp/indice-wp04`.
+- **Desfazer:** build falho não deixa recurso. A pasta `~/indice-wp04-sessao/clone` sai no Passo 15.
 - **Risco:** se um build estiver em andamento além do passo 0, cancele
   (`gcloud builds cancel <id>`) e avise o Luke. `imagens=MUDARAM` também é falha.
 
@@ -906,6 +952,10 @@ gcloud run services get-iam-policy indice-web-qa --region "$REGION" --format='ya
 grep -q allUsers "$PROVAS/14-iam-web-qa.txt" && print "ALERTA: allUsers na web de QA" || print "sem allUsers"
 WEB_QA=$(gcloud run services describe indice-web-qa --region "$REGION" --format='value(status.url)')
 curl -s -o /dev/null -w "anonimo=%{http_code}\n" "$WEB_QA/" | tee -a "$PROVAS/14-iam-web-qa.txt"
+# A API de QA é a única pública (plan.md): allUsers só nela.
+gcloud run services get-iam-policy indice-api-qa --region "$REGION" --format='yaml(bindings)' \
+  | tee "$PROVAS/14-iam-api-qa.txt"
+grep -q allUsers "$PROVAS/14-iam-api-qa.txt" && print "api-qa: allUsers ok" || print "ALERTA: api-qa sem allUsers"
 ```
 
   Depois, o proxy. **Ele roda em primeiro plano e prende o terminal** até Ctrl-C: rode
@@ -913,7 +963,7 @@ curl -s -o /dev/null -w "anonimo=%{http_code}\n" "$WEB_QA/" | tee -a "$PROVAS/14
 
 ```zsh
 gcloud run services proxy indice-web-qa --region "$REGION" --port 3100
-# navegador: http://localhost:3100 ; Ctrl-C encerra o proxy
+# navegador: http://127.0.0.1:3100 (proxy só em IPv4) ; Ctrl-C encerra o proxy
 ```
 
 - **Saída esperada:** `exit=0`; política com `roles/run.invoker` só para
@@ -960,6 +1010,7 @@ gcloud config get project   # deve ser igual a projeto_gcloud_anterior em 01-est
 | (b) build sem `_TAG` falha antes de qualquer push | 12 | `PROVA_B_*=ok`, `imagens=sem-mudanca` | `12-*` |
 | (c) `neonctl branches reset --help` lista `--parent` | 5 | `PROVA_C=ok` | `05-prova-c.txt` |
 | (d) bootstrap com e-mail divergente aborta | 4 | `PROVA_D=ok` | `04-prova-d.txt` |
+| (e) `gh-deployer` no projeto só com os quatro papéis; `indiceBucketLister` só com `storage.buckets.list` | 9e | `PROVA_E=ok` | `09e-*` |
 
 ## Pontos de alerta, em resumo
 

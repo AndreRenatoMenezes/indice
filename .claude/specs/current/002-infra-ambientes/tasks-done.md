@@ -47,3 +47,14 @@
 - Evidência: diff e saída do validador.
 - Depende de: WP01
 
+### WP04 — Provisionar (execução externa)
+- Lane: pronto (aprovada pela Ahsoka, 2026-10-21; pendente só o print do console do Neon, scale to zero da branch `qa`, do usuário)
+- Dono: Obi (executa) · usuário (autentica e confirma os gates)
+- Log: 2026-10-21 Obi — passos 1-10: `PROVA_D`, `PROVA_C`, `PROVA_A`, `GATE_P7` (19/19), `GATE_P8` com a frase do usuário, `GATE_P10`, `PRE_MERGE` ok; branch Neon `qa` (`br-holy-dawn-acuxawm7`, filha de `production`); bootstrap `exit=0`; política de limpeza ok em `indice` e `indice-qa`; 3 variables do repositório.
+- Log: 2026-10-21 Obi — correção A (papel `indiceBucketLister`, só `storage.buckets.list`): `PROVA_E`, `IDEMPOTENCIA_E` ok. Primeiro deploy de QA (Chewie, rerun do run 39610223744) SUCCESS. Passos 12-15: `PROVA_B` (sem tag e tag vazia recusadas), `imagens=sem-mudanca`, seed e rekey `succeeded`, `GATE_P13` (chaves cruzadas 200/401/200/401), `indice-web-qa` privado com `run.invoker` só do Andre (anônimo 403), `indice-api-qa` com `allUsers`, `IDEMPOTENCIA_14` ok, Produção sem revisão nova.
+- Possui: nenhum arquivo
+- Objetivo: branch Neon `qa`, `bootstrap.sh`, valores dos secrets de QA, seed + rekey, variables do repositório.
+- Aceite: conforme `plan.md`.
+- Evidência: provas em `~/indice-wp04-provas` (fora do repo, sem segredo).
+- Depende de: WP02, WP03
+

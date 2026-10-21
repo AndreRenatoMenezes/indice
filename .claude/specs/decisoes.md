@@ -110,3 +110,12 @@ Entrada: data · autor · decisão · racional · alternativas rejeitadas · cus
 - **Alternativas rejeitadas:** manter colagem do usuário (corte silencioso); só apertar o gate (continuaria falhando).
 - **Custo de reverter:** baixo (roteiro).
 - **Escopo afetado:** `wp04-roteiro.md` passo 7, role `Engineer-DevOps` (regra "usuário digita segredos" restrita à frase do passo 8).
+
+## 2026-10-21 · Leia (Arquiteto)
+
+- **Decisão:** opção A para o 403 do primeiro deploy de QA. `gh-deployer` recebe o papel customizado `indiceBucketLister` (só `storage.buckets.list`) no projeto; `bootstrap.sh` cria o papel e o vínculo de forma idempotente; o roteiro e o "Desfazer" do README ganham as linhas correspondentes. `deploy.yml` não muda.
+- **Racional:** o `gcloud builds submit` com o bucket padrão lista os buckets do projeto para confirmar que `<projeto>_cloudbuild` pertence a ele. A permissão nova expõe só nomes e metadados de bucket, nenhum objeto. A opção B (`--gcs-source-staging-dir`) pula essa checagem: se o bucket um dia fosse apagado e o nome tomado por outro projeto, o build leria a fonte de lá e executaria código de terceiros com a SA do build, que lê os secrets e faz deploy em Produção.
+- **Efeito em Produção:** o deploy de `main` usa a mesma `gh-deployer` e o mesmo bucket, então tinha o mesmo 403 latente; a correção vale para os dois ambientes. Nenhum serviço ou secret de Produção muda.
+- **Alternativas rejeitadas:** opção B; `roles/storage.admin` ou um papel predefinido de leitura de bucket no projeto (mais permissões que o necessário).
+- **Custo de reverter:** baixo. Papel customizado apagado fica reservado por cerca de 37 dias (`gcloud iam roles undelete` para recriar com o mesmo ID).
+- **Escopo afetado:** `002-infra-ambientes/plan.md` (autenticação GCP, WP02, prova (e) da WP04); `infra/cloudrun/bootstrap.sh`, `infra/cloudrun/README.md`.
