@@ -4,6 +4,7 @@
 
 | Feature | Domínio | Status |
 |---|---|---|
+| 002-infra-ambientes | infra | spec pronta, plano aprovado |
 
 ## Próximas
 
