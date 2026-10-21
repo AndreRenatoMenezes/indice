@@ -46,6 +46,7 @@ PROVIDER=github-oidc
 DEPLOY_SA_NAME=gh-deployer
 DEPLOY_SA="${DEPLOY_SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 BUILD_BUCKET="${PROJECT_ID}_cloudbuild"
+BUCKET_LISTER_ROLE=indiceBucketLister
 
 QA_DB_SECRET=indice-qa-database-url
 QA_DB_DIRECT_SECRET=indice-qa-database-url-direct
@@ -159,6 +160,30 @@ exists g storage buckets describe "gs://${BUILD_BUCKET}" \
   || g storage buckets create "gs://${BUILD_BUCKET}" --location US --uniform-bucket-level-access
 g storage buckets add-iam-policy-binding "gs://${BUILD_BUCKET}" \
   --member "serviceAccount:${DEPLOY_SA}" --role roles/storage.admin >/dev/null
+# Com o bucket padrão, o `builds submit` lista os buckets do projeto para checar que
+# o bucket é deste projeto (anti name-squatting); `storage.buckets.list` só existe em
+# nível de projeto. O papel dá só isso: nomes e metadados, nenhum objeto.
+# Papel apagado fica ~37 dias reservado (describe responde com deleted) e volta com
+# undelete; papel existente com outras permissões aborta, como o provider acima.
+if lister=$(g iam roles describe "$BUCKET_LISTER_ROLE" --project "$PROJECT_ID" \
+              --format 'value(deleted,includedPermissions.list())' 2>/dev/null); then
+  if [[ ${lister%%$'\t'*} == [Tt]rue ]]; then
+    g iam roles undelete "$BUCKET_LISTER_ROLE" --project "$PROJECT_ID" >/dev/null
+    lister=$(g iam roles describe "$BUCKET_LISTER_ROLE" --project "$PROJECT_ID" \
+               --format 'value(deleted,includedPermissions.list())')
+  fi
+  if [[ ${lister#*$'\t'} != storage.buckets.list ]]; then
+    echo "papel ${BUCKET_LISTER_ROLE} já existe com permissões diferentes de storage.buckets.list; abortando." >&2
+    echo "corrija com 'gcloud iam roles update ${BUCKET_LISTER_ROLE} --project ${PROJECT_ID} --permissions storage.buckets.list' e rode de novo" >&2
+    exit 1
+  fi
+  echo "papel ${BUCKET_LISTER_ROLE} confere (só storage.buckets.list)"
+else
+  g iam roles create "$BUCKET_LISTER_ROLE" --project "$PROJECT_ID" \
+    --title "Indice: listar buckets" --permissions storage.buckets.list --stage GA >/dev/null
+fi
+g projects add-iam-policy-binding "$PROJECT_ID" --member "serviceAccount:${DEPLOY_SA}" \
+  --role "projects/${PROJECT_ID}/roles/${BUCKET_LISTER_ROLE}" --condition None >/dev/null
 
 log "Artifact Registry: repositório ${AR_REPO_QA} e limpeza (10 versões mais recentes por imagem)"
 # Repositórios separados: a limpeza por contagem de QA nunca alcança a imagem
@@ -259,6 +284,17 @@ exists g run jobs describe indice-rekey-qa --region "$REGION" \
        --set-secrets "$QA_JOB_SECRETS" \
        --command sh --args "^@^-c@${REKEY_SCRIPT}" \
        --max-retries 0
+
+log "API de QA pública (protegida pela chave de QA)"
+# O `run deploy --allow-unauthenticated` roda com a SA do build, que não tem
+# run.services.setIamPolicy: o deploy só avisa e a API fica privada (403 antes da
+# chave). Só a API recebe allUsers; a web de QA nunca.
+if exists g run services describe indice-api-qa --region "$REGION"; then
+  g run services add-iam-policy-binding indice-api-qa --region "$REGION" \
+    --member allUsers --role roles/run.invoker >/dev/null
+else
+  echo "indice-api-qa ainda não existe: rode este script de novo depois do primeiro deploy de QA"
+fi
 
 log "Acesso à web de QA para ${INVOKER_EMAIL}"
 if exists g run services describe indice-web-qa --region "$REGION"; then

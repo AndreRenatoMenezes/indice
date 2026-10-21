@@ -111,8 +111,10 @@ De cada branch guarde **duas** connection strings:
 
 `infra/cloudrun/bootstrap.sh` é idempotente (pode rodar de novo): só cria o que
 falta. Ele confere o e-mail do usuário do app contra o seed de Produção, cria
-o pool/provider de Workload Identity, a conta `gh-deployer` e seus papéis, o
-repositório `indice-qa`, a política de limpeza nos dois repositórios (efetiva,
+o pool/provider de Workload Identity, a conta `gh-deployer` e seus papéis
+(inclui o papel customizado `indiceBucketLister`, só `storage.buckets.list` no
+projeto: o `gcloud builds submit` lista os buckets para checar que
+`<projeto>_cloudbuild` é do projeto), o repositório `indice-qa`, a política de limpeza nos dois repositórios (efetiva,
 fora do modo de teste), os secrets de QA (lendo
 os valores do terminal, sem eco), os jobs `indice-seed-qa` e `indice-rekey-qa`,
 e dá `roles/run.invoker` em `indice-web-qa` à sua conta. Os e-mails entram como
@@ -131,6 +133,21 @@ da cópia. Se o job `indice-seed` existe, o script compara com o
 No fim ele imprime os valores de `GCP_PROJECT_ID`, `GCP_WIF_PROVIDER` e
 `GCP_DEPLOY_SA`: crie-os em *Settings → Secrets and variables → Actions →
 Variables* do repositório (não são segredos).
+
+Desfazer o papel `indiceBucketLister`: primeiro o vínculo, depois o papel. Sem ele,
+o `builds submit` do deploy volta a dar 403 no bucket.
+
+```bash
+gcloud projects remove-iam-policy-binding indice-509203 --condition None \
+  --member serviceAccount:gh-deployer@indice-509203.iam.gserviceaccount.com \
+  --role projects/indice-509203/roles/indiceBucketLister
+gcloud iam roles delete indiceBucketLister --project indice-509203
+```
+
+Papel apagado fica reservado por cerca de 37 dias: o nome não pode ser recriado
+com `create` nesse prazo. Para voltar, use
+`gcloud iam roles undelete indiceBucketLister --project indice-509203` (o
+`bootstrap.sh` faz isso sozinho se encontrar o papel apagado).
 
 Os secrets de Produção já existem. Para recriar Produção do zero:
 
@@ -163,7 +180,11 @@ gcloud builds submit --config infra/cloudrun/cloudbuild.yaml \
 ```
 
 Depois do primeiro deploy de QA, rode o `bootstrap.sh` de novo: ele só
-consegue dar o `run.invoker` em `indice-web-qa` quando o serviço existe.
+consegue dar o `run.invoker` em `indice-web-qa` (sua conta) e em `indice-api-qa`
+(`allUsers`) quando os serviços existem. O deploy pede `--allow-unauthenticated`
+para a API, mas roda com a SA do build, que não tem `run.services.setIamPolicy`:
+o build só avisa ("Setting IAM policy failed") e a API de QA fica privada, com
+403 antes de a chave ser conferida. A web de QA nunca recebe `allUsers`.
 
 ### 4. Seed (uma vez por ambiente)
 
@@ -199,7 +220,7 @@ Google no `gcloud`:
 
 ```bash
 gcloud run services proxy indice-web-qa --region southamerica-east1 --port 3100
-# abra http://localhost:3100
+# abra http://127.0.0.1:3100 (o proxy escuta só em IPv4; localhost pode ir para ::1)
 ```
 
 Não abre no celular. A API de QA continua pública (o APK precisa dela) e exige

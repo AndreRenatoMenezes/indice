@@ -86,3 +86,36 @@ Entrada: data · autor · decisão · racional · alternativas rejeitadas · cus
 - **Alternativas rejeitadas:** atualizar o gcloud à espera da flag (não garantida); deixar em dry run (a limpeza não apagaria nada).
 - **Custo de reverter:** baixo.
 - **Escopo afetado:** `002-infra-ambientes/plan.md` (decisão de limpeza, WP02, prova (a) da WP04); substitui o "`--no-dry-run`" da decisão anterior.
+
+## 2026-10-21 · Luke (Maestro)
+
+- **Decisão:** a WP04 passa a ser executada pelo Obi (passos 1 a 10 do `wp04-roteiro.md`), por pedido e autorização explícita do usuário. O usuário faz os logins (gcloud, neon, gh) e digita segredos e a frase de confirmação do passo 8; o Obi nunca lê nem grava esses valores. Passo 11 em diante (merge do PR #7, primeiro deploy de QA) exige nova autorização. Exceção ao "git/GitHub só do Chewie": `gh variable list/set` das 3 variables do passo 10, só pelo Obi.
+- **Racional:** o roteiro tem gates binários e foi aprovado em 3 revisões independentes; o risco sobre Produção (passo 8) continua com gate humano.
+- **Alternativas rejeitadas:** Obi executa também o merge; passo 10 pelo Chewie (Copilot trava em permissões).
+- **Custo de reverter:** médio — recursos de QA têm desfazer guiado por inventário; imagens apagadas do repositório `indice` não têm rollback (passo 8).
+- **Escopo afetado:** role `Engineer-DevOps` (exceção registrada), WP04.
+
+## 2026-10-21 · Luke (Maestro)
+
+- **Decisão:** GATE_P7 falhou na fase A (Keychain apagado, nada alterado no GCP). Autorizada nova tentativa com: (1) diagnóstico read-only `neonctl cs … | wc -l` (só contagem); (2) gate imprimindo ok/falhou por condição em `07-gate-diagnostico.txt`, sem valores; (3) comandos do usuário com `head -1 | tr -d '\n'` no lugar de `awk printf`. Condições do gate não afrouxam.
+- **Racional:** hipótese mais provável é saída multilinha concatenada; diagnóstico sem expor segredo.
+- **Alternativas rejeitadas:** relaxar o gate; imprimir as URLs.
+- **Custo de reverter:** baixo (só roteiro/comandos). Ahsoka revisa o diff do gate depois.
+- **Escopo afetado:** `wp04-roteiro.md` passo 7.
+
+## 2026-10-21 · Luke (Maestro)
+
+- **Decisão:** 2ª falha do GATE_P7 (13/15 ok; faltou o sufixo `pgbouncer`/`connection_limit`). Causa provável: prompt sem eco do `security -w` corta em 128 caracteres. Passo 7 muda: o Obi grava as URLs no Keychain por pipe `neonctl cs | security -i` (stdout/stderr descartados, sem clipboard, argv ou arquivo); o usuário deixa de digitar as URLs. Gate soma igualdade em memória Keychain == saída fresca do `neonctl`. A frase do passo 8 continua do usuário. Ahsoka revisa o diff antes da gravação.
+- **Racional:** valor nunca é impresso nem digitado; elimina o corte e o erro de colagem; os valores já vêm do Neon autenticado pelo usuário.
+- **Alternativas rejeitadas:** manter colagem do usuário (corte silencioso); só apertar o gate (continuaria falhando).
+- **Custo de reverter:** baixo (roteiro).
+- **Escopo afetado:** `wp04-roteiro.md` passo 7, role `Engineer-DevOps` (regra "usuário digita segredos" restrita à frase do passo 8).
+
+## 2026-10-21 · Leia (Arquiteto)
+
+- **Decisão:** opção A para o 403 do primeiro deploy de QA. `gh-deployer` recebe o papel customizado `indiceBucketLister` (só `storage.buckets.list`) no projeto; `bootstrap.sh` cria o papel e o vínculo de forma idempotente; o roteiro e o "Desfazer" do README ganham as linhas correspondentes. `deploy.yml` não muda.
+- **Racional:** o `gcloud builds submit` com o bucket padrão lista os buckets do projeto para confirmar que `<projeto>_cloudbuild` pertence a ele. A permissão nova expõe só nomes e metadados de bucket, nenhum objeto. A opção B (`--gcs-source-staging-dir`) pula essa checagem: se o bucket um dia fosse apagado e o nome tomado por outro projeto, o build leria a fonte de lá e executaria código de terceiros com a SA do build, que lê os secrets e faz deploy em Produção.
+- **Efeito em Produção:** o deploy de `main` usa a mesma `gh-deployer` e o mesmo bucket, então tinha o mesmo 403 latente; a correção vale para os dois ambientes. Nenhum serviço ou secret de Produção muda.
+- **Alternativas rejeitadas:** opção B; `roles/storage.admin` ou um papel predefinido de leitura de bucket no projeto (mais permissões que o necessário).
+- **Custo de reverter:** baixo. Papel customizado apagado fica reservado por cerca de 37 dias (`gcloud iam roles undelete` para recriar com o mesmo ID).
+- **Escopo afetado:** `002-infra-ambientes/plan.md` (autenticação GCP, WP02, prova (e) da WP04); `infra/cloudrun/bootstrap.sh`, `infra/cloudrun/README.md`.
