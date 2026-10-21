@@ -41,7 +41,7 @@ Mergeio um PR em `development` e o QA se atualiza sozinho; mergeio `development`
 ## Está pronto quando
 
 - [ ] `prev` mergeada em `development` por PR **antes** do primeiro PR desta feature; nenhuma branch apagada sem autorização registrada do usuário.
-- [ ] PR para `development` com CI vermelho não pode ser mergeado (botão bloqueado).
+- [ ] PR para `development` com CI vermelho não pode ser mergeado (botão bloqueado; prova: proteção lida de volta com checks `node`+`android` obrigatórios).
 - [ ] PR para `main` com CI vermelho não pode ser mergeado; push direto em `main` é recusado, inclusive para o dono do repositório (sem bypass de admin).
 - [ ] Merge em `development` publica nova revisão de `indice-api-qa` e `indice-web-qa` com a imagem do commit mergeado (tag = SHA), sem ação manual além do merge.
 - [ ] Merge em `main` publica nova revisão de `indice-api` e `indice-web` só depois de o Andre aprovar o deploy pendente no ambiente `production`; sem aprovação, nada muda em Produção.
@@ -50,7 +50,7 @@ Mergeio um PR em `development` e o QA se atualiza sozinho; mergeio `development`
 - [ ] `GET /health` da API de QA responde 200; `GET /habits/today` da API de QA responde 200 com a chave de QA e 401 com a chave de Produção (e o inverso na Produção). Vale também logo após rodar o reset de QA.
 - [ ] Abrir a URL `*.run.app` de `indice-web-qa` numa janela anônima responde 403; pelo `gcloud run services proxy indice-web-qa` com a conta do Andre, a página carrega com os dados copiados.
 - [ ] Rodar o script de reset de QA deixa a branch Neon `qa` com os dados atuais da Produção, as migrações de `development` aplicadas e só a chave de QA válida; `GET /habits/today` com a chave de QA devolve os dados copiados (não lista vazia), e a tabela `User` de `qa` tem o mesmo número de linhas da Produção.
-- [ ] Imagens de QA e de Produção ficam em repositórios separados do Artifact Registry, cada um com política de limpeza **efetiva** (não *dry run*) que mantém as 10 versões mais recentes; a imagem que serve Produção continua existindo depois de 11 deploys de QA seguidos.
+- [ ] Imagens de QA e de Produção ficam em repositórios separados do Artifact Registry, cada um com política de limpeza **efetiva** (não *dry run*) que mantém as 10 versões mais recentes; deploy de QA publica só em `indice-qa` (o repositório `indice` não contém imagem de QA), então a imagem que serve Produção e as de rollback não dependem do ritmo de QA.
 - [ ] Build sem `_TAG` falha antes de publicar qualquer imagem.
 - [ ] O repositório não contém nenhuma connection string, chave de API nem JSON de conta de serviço (busca por `postgresql://`, `private_key`, valores das chaves → zero ocorrências fora de exemplos com placeholder).
 - [ ] O provider WIF recusa token de outro repositório (condição `assertion.repository`), e o ambiente `production` do GitHub só aceita deploy a partir de `main`.

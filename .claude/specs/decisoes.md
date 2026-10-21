@@ -119,3 +119,19 @@ Entrada: data · autor · decisão · racional · alternativas rejeitadas · cus
 - **Alternativas rejeitadas:** opção B; `roles/storage.admin` ou um papel predefinido de leitura de bucket no projeto (mais permissões que o necessário).
 - **Custo de reverter:** baixo. Papel customizado apagado fica reservado por cerca de 37 dias (`gcloud iam roles undelete` para recriar com o mesmo ID).
 - **Escopo afetado:** `002-infra-ambientes/plan.md` (autenticação GCP, WP02, prova (e) da WP04); `infra/cloudrun/bootstrap.sh`, `infra/cloudrun/README.md`.
+
+## 2026-10-21 · Leia (Arquiteto)
+
+- **Decisão:** aceite da 002 dividido em WP06 (tudo provável em QA e por leitura, sem escrita em Produção) e WP07 (primeira promoção real `development` → `main`, com aprovação no Environment `production`). Plano por critério em `plan.md` ("Plano de aceite"). Provas por leitura de configuração valem para "botão bloqueado" (proteção com checks obrigatórios), "push recusado em `main`" (proteção idêntica à da branch-espelho testada) e "WIF recusa outro repositório" (condição do provider). O critério "11 deploys de QA seguidos" vira prova estrutural (QA publica só em `indice-qa`; `indice` sem imagem de QA). Falha de migração é provada por `gcloud builds submit` manual em QA a partir de branch local não publicado, com limpeza por `prisma migrate resolve --rolled-back`. A migração de QA é provada por uma migração inócua `aceite_002_noop` (`SELECT 1;`, sem mudança de schema, `schema.md` intocado), que fica no histórico e serve de prova da WP07. O `qa-reset.sh` é executado pelo Andre no próprio terminal (credencial Neon e confirmação interativa).
+- **Racional:** nenhuma prova da WP06 precisa escrever em Produção; a promoção publica a 001 inteira e é decisão de release do usuário. Abrir PR vermelho, empurrar em `main` ou forjar token de outro repositório testariam o GitHub/GCP, não o contrato, e o push em `main`, se a regra estivesse errada, entraria em Produção.
+- **Alternativas rejeitadas:** migração com erro mergeada em `development` (quebraria o pipeline de QA e seria promovida); fazer 11 deploys de QA; deixar a promoção sem WP própria.
+- **Custo de reverter:** baixo; a `aceite_002_noop` é permanente, mas inócua.
+- **Escopo afetado:** `002-infra-ambientes/plan.md` (Plano de aceite, WP07), `spec.md` (dois critérios reescritos com a forma da prova).
+
+## 2026-10-21 · Luke (Maestro)
+
+- **Decisão:** erro de orquestração. Instruí o Chewie a fazer `git stash -u` incluindo `.maestri/`; isso removeu as pastas dos roles e quebrou o diretório de trabalho de todos os terminais. Por pedido explícito do usuário ("corrija"), executei eu mesmo, uma única vez, `git stash pop` depois de ler o estado (árvore limpa, stash intacto, sem conflito). Exceção pontual à regra "git só do Git Master": nenhum executor tinha shell funcional. Daqui em diante `.maestri/` nunca entra em stash (stash só de arquivos rastreados, sem `-u`).
+- **Racional:** restaurar o estado local do usuário, ação não destrutiva e reversível.
+- **Alternativas rejeitadas:** pedir ao usuário para digitar o comando (já oferecido; o usuário pediu a correção direta).
+- **Custo de reverter:** baixo (o stash foi consumido; os arquivos voltaram idênticos).
+- **Escopo afetado:** WP06 passo 3 (reinício do Chewie).
