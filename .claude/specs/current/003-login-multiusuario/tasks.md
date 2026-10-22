@@ -14,25 +14,8 @@ Ondas: 1 = WP01 + WP02 · 2 = WP03 + WP05 + WP06 (WP04 logo após a WP03 do Rex)
 - Evidência: `spike-neon-auth.md` + lista dos comandos (sem segredo).
 - Depende de: —
 
-### WP02 — Contratos e migração
-- Lane: revisão
-- Dono: Rex
-- Possui: `packages/shared/src/index.ts`, `packages/db/prisma/schema.prisma`, `packages/db/prisma/migrations/<ts>_user_auth_user_id/`, `.claude/specs/schema.md` (Rex aplica o texto do delta do `plan.md`, sem redesenhar o schema)
-- Fora de escopo: `apps/**`
-- Objetivo: DTOs de auth no shared e `User.authUserId` com migração aditiva.
-- Aceite: `npm run typecheck` e `npm run build` passam; migração expand-only; `schema.md` atualizado no mesmo commit.
-- Evidência: saída dos comandos e diff.
-- Depende de: —
-- Log:
-  - 2026-10-22: Bloco Auth adicionado em `packages/shared/src/index.ts` conforme `plan.md`.
-  - 2026-10-22: Campo `User.authUserId String? @unique` adicionado em `packages/db/prisma/schema.prisma`.
-  - 2026-10-22: Migração manual aditiva `20261022203000_user_auth_user_id/migration.sql` criada (sem banco local ativo / credencial de `.env` rotacionada).
-  - 2026-10-22: `.claude/specs/schema.md` atualizado com o campo `USER.authUserId`, regra de vínculo e histórico de migrações.
-  - 2026-10-22: Comandos `npm run typecheck`, `npm run test` e `npm run build` executados com sucesso. Handoff para revisão da Ahsoka via Luke.
-  - 2026-10-22: Revisão da Ahsoka: aprovado. DTOs de Auth idênticos ao plan.md; migração 20261022203000_user_auth_user_id expand-only (coluna nullable e índice único); schema.md com delta exato (campo, regra, histórico); paths respeitam escopo da WP02 (apps/** intocado; Dto.kt atribuído à WP05); sem segredos; npm run typecheck, test e build executados com sucesso (código 0). Veredito entregue ao Luke.
-
 ### WP03 — API
-- Lane: planejado
+- Lane: revisão
 - Dono: Rex
 - Possui: `apps/api/package.json`, `apps/api/src/config.ts`, `apps/api/src/plugins/auth.ts`, `apps/api/src/app.ts`, `apps/api/src/routes/auth.ts`, `apps/api/src/modules/auth/**`, `apps/api/src/lib/neon-auth-client.ts`
 - Fora de escopo: `apps/web/**`, `apps/android/**`, `infra/**`
@@ -40,29 +23,12 @@ Ondas: 1 = WP01 + WP02 · 2 = WP03 + WP05 + WP06 (WP04 logo após a WP03 do Rex)
 - Aceite: critérios de "Dados e acesso" da spec cobertos por vitest; `npm run typecheck|test|build` passam.
 - Evidência: saída dos comandos; testes listados por critério.
 - Depende de: WP01, WP02
-
-### WP04 — Web
-- Lane: planejado
-- Dono: Rex
-- Possui: `apps/web/middleware.ts`, `apps/web/lib/{session,api,actions}.ts`, `apps/web/app/{entrar,criar-conta,verificar-email,esqueci-senha,redefinir-senha}/**`, componente do Nav
-- Fora de escopo: `apps/api/**`, `apps/android/**`, `infra/**`
-- Objetivo: telas e sessão por cookies com renovação no middleware.
-- Aceite: critérios "Web" da spec; `npm run typecheck|test|build` passam.
-- Evidência: saída dos comandos; capturas em `.claude/specs/current/003-login-multiusuario/capturas/`.
-- Depende de: WP03 (pode começar contra a API local assim que a WP02 fechar)
-
-### WP05 — Android
-- Lane: revisão
-- Dono: Engineer Android (a recrutar)
-- Possui: `apps/android/**`
-- Fora de escopo: `apps/api/**`, `apps/web/**`, `packages/**`
-- Objetivo: telas de entrada, SessionStore, Authenticator, widget deslogado, sem chave embutida.
-- Aceite: critérios "Android" da spec; `./gradlew :app:assembleDebug` passa; `Dto.kt` espelha o shared.
-- Evidência: saída do build e diff.
-- Depende de: WP02 (contrato); prova final com a WP03
 - Log:
-  - 2026-10-22 · Engineer Android · implementado em `apps/android/**`: `SessionStore` (DataStore), `AuthAuthenticator` (mutex, retry único, 401 no refresh limpa a sessão), Interceptor Bearer (pula `/auth/*`), telas Entrar/Criar conta/Código/Esqueci a senha, "Acesso removido" (403 com sessão), navegação por estado de sessão com ViewModels por sessão, "Sair" no cabeçalho de Hoje, widget "Entre no app", sem `API_KEY` no BuildConfig, `allowBackup=false`. `./gradlew :app:assembleDebug` passa. Fluxo contra a API real pendente (WP03).
-  - 2026-10-22 · Revisão da Ahsoka: aprovado por diff e build. `./gradlew :app:assembleDebug --rerun-tasks` BUILD SUCCESSFUL (app-debug.apk 13 MB); grep sem `API_KEY`/`X-Api-Key`/`dev-local-key` em `apps/android` (fora de `build/`); `allowBackup="false"`; `Dto.kt` espelha o bloco Auth do shared; `AuthAuthenticator` com Mutex, checagem de token já renovado e retry único (`priorResponse`), client de refresh sem authenticator; widget deslogado "Entre no app"; telas Entrar/Criar conta/Código/Esqueci/Acesso removido. Pendente: fluxo manual no Pixel 10 após a WP03. Riscos anotados: sign-in com e-mail não verificado reenvia código sozinho (fora do plan), "Sair" só na aba Hoje, refresh só reativo ao 401 (sem refresh por `exp`).
+  - 2026-10-22 · Rex · implementado: `jose` em `apps/api/package.json`; `config.ts` (env obrigatórias em produção, allowlist, timeout 10 s, limite 10/min); `modules/auth/{allowlist,credential,identity,jwt,resolve-user,user-store,context}.ts` com vitest ao lado; `lib/neon-auth-client.ts` (interface + HTTP); `plugins/auth.ts` (ApiKey ou JWT, allowlist e vínculo em toda requisição); `routes/auth.ts` (`/auth/*` e `GET /me`); `app.ts` (contexto injetável, checagem de produção, limite por rota).
+  - 2026-10-22 · Rex · pendência do protocolo isolada em `lib/neon-auth-client.ts`: `[plano]` cookie `__Secure-neonauth.session_token`, `GET /token` e JWKS; nomes dos demais endpoints, corpo do `/token`, tamanho do OTP (6 em `packages/shared`) e parâmetro do link de reset (`token`) seguem `[provisório]` do Better Auth 1.7.6 até o `spike-neon-auth.md` da WP01. `NEON_AUTH_PROTOCOL_CONFIRMED=false` mantém aviso no log ao subir com auth; troca em um lugar só.
+  - 2026-10-22 · Rex · vitest: 146 testes em 17 arquivos (novos: `config` 5, `allowlist` 6, `credential` 6, `identity` 5, `resolve-user` 10, `jwt` 10, `neon-auth-client` 13, `routes/auth` 30). Cobrem: ligação por e-mail sem diferenciar caixa e `User.id` preservado; criação de Índice vazio; e-mail fora da lista com 403 e sem `User`; JWT inválido/vencido/outro emissor/outra audiência → 401; retirada da lista → 403; `email not verified` → 403; normalize expirado → 401; 502 do provedor; 400/409/503; 10/min por IP (11ª = 429); `NODE_ENV=production` sem env não sobe e nomeia o que falta.
+  - 2026-10-22 · Rex · gates: `npm run typecheck` (7/7), `npm run test` (146/146) e `npm run build` (5/5) com código 0. `apps/web/**`, `apps/android/**` e `infra/**` intocados. Sem stage/commit (Chewie).
+  - 2026-10-22 · Rex · ressalva da Ahsoka: `trustProxy: true` virou 1 salto confiável (`hop < 1`, equivalente a `trust: 1` do proxy-addr). A API é exposta direto em `*.run.app` (`cloudbuild.yaml` sem balanceador), então o Cloud Run é o único proxy e o `req.ip` passa a ser a última entrada do `X-Forwarded-For`, não a forjada à esquerda. Teste novo em `routes/auth.test.ts` ("X-Forwarded-For forjado não burla o limite por IP"): 11 requisições com IP real fixo à direita → 429 na 11ª; com `trustProxy: true` o mesmo teste falha (conferido antes do ajuste). Gates re-rodados: typecheck 7/7, test 147/147, build 5/5. Se um balanceador externo entrar na frente, revisar o número de saltos.
 
 ### WP06 — Infra
 - Lane: planejado

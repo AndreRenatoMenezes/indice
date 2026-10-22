@@ -220,3 +220,18 @@ Entrada: data · autor · decisão · racional · alternativas rejeitadas · cus
 - **Racional:** (1) poupa um toque, e o reenvio já é idempotente (204 sempre); (2) sem a ressalva, um usuário tirado da lista ficaria sem saída.
 - **Custo de reverter:** baixo.
 - **Escopo afetado:** 003 (WP04 e WP05).
+
+## 2026-10-22 · Luke (Maestro)
+
+- **Decisão:** WP03 (código e lógica pura) aprovada pela Ahsoka; parte de protocolo do Neon Auth fica pendente do spike da WP01 (4 pontos listados no relatório dela). WP03 só fecha "pronta" com a prova ponta a ponta. WP04 (web) começa em paralelo contra o contrato fixo. Ressalva de segurança da Ahsoka: `trustProxy: true` faz o limite de 10/min por IP em `/auth/*` ser contornável forjando `X-Forwarded-For`; Rex corrige para o número de saltos do Cloud Run, com evidência, ou registra o risco aceito.
+- **Racional:** ressalva de baixo custo, no arquivo da WP03 do Rex; sem mudança de contrato.
+- **Custo de reverter:** baixo.
+- **Escopo afetado:** WP03.
+
+## 2026-10-22 · Leia (Arquiteto)
+
+- **Decisão:** na web da 003, o cookie `indice_rt` passa a ter `maxAge` de 7 dias e é regravado com mais 7 dias a cada refresh bem-sucedido (janela deslizante). Fechar o navegador não desloga.
+- **Racional:** mesmo comportamento do Android. Os 7 dias seguem a validade padrão da sessão do Better Auth, e quem manda é a sessão do Neon: vencida ou revogada, o refresh dá 401 e leva a `/entrar`. O "Sair" revoga a sessão no servidor.
+- **Alternativas rejeitadas:** cookie de sessão (desloga a cada vez que fecha o navegador, o que incomoda num app pessoal de uso diário); 30 dias (passaria da sessão do Neon e só guardaria um token morto).
+- **Custo de reverter:** baixo (um atributo do cookie).
+- **Escopo afetado:** 003, WP04.
