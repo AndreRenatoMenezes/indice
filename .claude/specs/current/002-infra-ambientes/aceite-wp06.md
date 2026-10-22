@@ -19,21 +19,30 @@ identificador do Neon é reproduzido aqui.
 | 11 | Senha dos secrets QA diferente da Produção, host Prod recusa e versões antigas não permanecem | aprovado | `18-roteiro-qa-reset.md`; PASSO5 confirmou senha distinta, recusa por autenticação e uma versão não destruída por secret. |
 | 12 | Repositórios separados, limpeza efetiva de 10 versões e nenhuma imagem QA em `indice` | aprovado | `09-prova-a.txt`, `09e-bootstrap-3.txt`, `09e-bootstrap-4.txt`, `16-pos-pr8-imagens.txt` e PASSO5 (`repo_indice_sem_qa=sim`). |
 | 13 | Build sem `_TAG` falha antes de publicar imagem | aprovado | `12-prova-b.txt`, `12-sem-tag-submit.log` e `12-tag-vazia-submit.log`. |
-| 14 | Repositório sem connection string, chave de API ou JSON de conta de serviço | aprovado-condicionado | A credencial publicada em `docs/deploy-manual.md` foi rotacionada e é inválida: `21-rotacao-gates-antes.txt`, `21-rotacao-execucao.txt`, `21-rotacao-gates-depois.txt`, `21-rotacao-depois-obi.txt` e a verificação independente registram P1000, nova credencial funcional, QA isolada, chaves, ledger e revisão. O valor antigo continua no histórico público no commit `0a41786`; o HEAD de `development` ainda contém as duas linhas conhecidas até o merge da correção de `docs/deploy-manual.md`. Condição: merge desse ajuste antes de fechar o critério. |
+| 14 | Repositório sem connection string, chave de API ou JSON de conta de serviço | aprovado | PR #10 (`chore/002-fechamento`) mergeado em `development` em 2026-10-22T12:56:23Z (commit `f269ca4`). `git grep 'postgresql://'` em `origin/development` retorna apenas placeholders locais (`.env.example`, `ci.yml`, `docker-compose.yml`) e comentários com `USUARIO:SENHA@HOST` em `docs/deploy-manual.md:157-158`. `git grep 'private_key\|BEGIN PRIVATE KEY'` retorna zero fora de texto do plano. `git grep` de padrões de senha Neon retorna zero. Diff `0a41786..origin/development` confirma remoção das linhas com credencial real e adição de aviso de segurança. Histórico público retém o valor no commit `0a41786`, mas a credencial foi rotacionada (ROTACAO=ok). |
 | 15 | WIF recusa outro repositório e Environment `production` aceita somente `main` | aprovado | `19-github-protecao.txt` e `21-rotacao-github-depois.txt` provam proteções, branches permitidas e Environment `production`. Leitura read-only do provider: issuer `https://token.actions.githubusercontent.com`; mapping exato de `google.subject`, `attribute.repository`, `attribute.ref` e `attribute.environment`; condição `assertion.repository == 'AndreRenatoMenezes/indice'`. |
 | 16 | README cobre preparação, branches, rollback e APK QA | aprovado | `infra/cloudrun/README.md`, seções de preparação, fluxo, `update-traffic`, proxy/reset e APK QA. |
 | 17 | Senha de QA diferente da de Produção após `qa-db-password` | aprovado | `18-roteiro-qa-reset.md` e PASSO5: senha distinta nos dois secrets, QA aceita a própria credencial e Produção recusa a credencial de QA; versões antigas destruídas. |
-| 18 | Rotação da senha de Produção após o incidente | aprovado-condicionado | `21-rotacao-gates-antes.txt`, `21-rotacao-execucao.txt`, `21-rotacao-gates-depois.txt`, `21-rotacao-depois-obi.txt`, `21-rotacao-github-depois.txt` e verificação independente: versões antigas destruídas, revisão nova saudável, senha vazada recusada, QA preservada, chaves e dados íntegros, e nenhum segredo no GitHub. Condição: merge da correção de `docs/deploy-manual.md`; o histórico público permanece, mas o valor está invalidado. |
+| 18 | Rotação da senha de Produção após o incidente | aprovado | Rotação executada pelo usuário e verificada (ROTACAO=ok). PR #10 mergeado em `development` em 2026-10-22T12:56:23Z (commit `f269ca4`): `docs/deploy-manual.md` contém apenas placeholders (`USUARIO:SENHA@HOST`) e aviso de segurança no HEAD. Diff `0a41786..origin/development` confirma remoção das credenciais. Provas: `21-rotacao-gates-antes.txt`, `21-rotacao-execucao.txt`, `21-rotacao-gates-depois.txt`, `21-rotacao-depois-obi.txt`, `21-rotacao-github-depois.txt`. Versões antigas dos secrets destruídas, revisão `indice-api-00004-54v` saudável com a nova credencial, senha vazada recusada. Histórico público retém o valor no commit `0a41786`, invalidado pela rotação. |
 
 ## Resumo
 
-- Aprovados: 14
-- Aprovados condicionados: 2
+- Aprovados: 16
+- Aprovados condicionados: 0
 - Reprovados: 0
 - Pendentes do usuário: 1
 - Adiados para WP07: 1
 
 Pendência final do usuário: confirmar a página da web QA pelo proxy local
-`127.0.0.1:3100` e fazer o merge da correção de `docs/deploy-manual.md` para
-retirar do HEAD as duas linhas históricas conhecidas. A promoção para Produção
-continua fora da WP06 e deve ser tratada na WP07.
+`127.0.0.1:3100` (critério 9). A promoção para Produção continua fora da WP06
+e deve ser tratada na WP07.
+
+**Nota sobre o deploy do PR #10:** o deploy automático de QA disparado pelo
+merge do PR #10 (commit `f269ca4`) **falhou no CI** — job `node` / step
+`npm run build` abortou por erro de `next/font` em `apps/web/app/layout.tsx`
+(run 39782519937, conclusion=failure). O job `deploy` foi corretamente pulado
+pelo CI vermelho. QA continua servindo a revisão do PR #9 (deploy SUCCESS,
+run 39684663918). Produção intacta: `indice-api-00004-54v` e
+`indice-web-00003-c65`, health 200. O erro de build é preexistente e não
+relacionado às mudanças do PR #10 (docs/specs/scripts). O build quebrado em
+`development` deve ser corrigido antes da WP07.
