@@ -1,20 +1,56 @@
-// Cliente da API para Server Components. A chave fica no servidor (env sem
-// NEXT_PUBLIC_), nunca chega ao navegador.
+// Cliente da API para Server Components e Server Actions. O token da sessão
+// fica nos cookies httpOnly (`lib/session.ts`), nunca chega ao navegador.
+// Em dev local sem sessão a web continua funcionando com a `dev-local-key`;
+// em produção sem token a requisição vira redirect para `/entrar`.
+import { redirect } from "next/navigation";
 import type {
   AccountDto, CategoryDto, CustomListDto, DailySummaryDto, EntryDto, GoalDetailDto, GoalProgressDto, HabitDto, HabitTodayDto,
   InstitutionDto, InvoiceDto, MediaItemDto, RecurrenceRuleDto, TransactionDto,
 } from "@indice/shared";
+import { getAccessToken } from "./session";
 
 const BASE = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-const KEY = process.env.INDICE_API_KEY_WEB ?? process.env.INDICE_API_KEY ?? "dev-local-key";
+const DEV_KEY = "dev-local-key";
+
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    path: string,
+  ) {
+    super(`API ${status} em ${path}: ${code}`);
+    this.name = "ApiError";
+  }
+}
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = await getAccessToken();
+
+  let auth: Record<string, string>;
+  if (token) auth = { authorization: `Bearer ${token}` };
+  else if (process.env.NODE_ENV === "production") redirect("/entrar");
+  else auth = { "x-api-key": DEV_KEY };
+
   const res = await fetch(`${BASE}${path}`, {
     ...init,
-    headers: { "content-type": "application/json", "x-api-key": KEY, ...(init?.headers ?? {}) },
+    headers: { "content-type": "application/json", ...auth, ...(init?.headers ?? {}) },
     cache: "no-store",
   });
-  if (!res.ok) throw new Error(`API ${res.status} em ${path}: ${await res.text()}`);
+
+  if (!res.ok) {
+    const text = await res.text();
+    let code = text || "unknown";
+    try {
+      const parsed = JSON.parse(text) as { error?: unknown };
+      if (typeof parsed.error === "string" && parsed.error) code = parsed.error;
+    } catch {
+      // corpo não-JSON: mantém o texto puro no erro.
+    }
+    // Sessão morta volta para a entrada; retirada da allowlist tem tela própria.
+    if (res.status === 401) redirect("/entrar");
+    if (res.status === 403 && code === "not allowed") redirect("/entrar/acesso-removido");
+    throw new ApiError(res.status, code, path);
+  }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
@@ -36,7 +72,7 @@ export const getGoal = (id: string) => api<GoalDetailDto>(`/goals/${id}`);
 export const getMedia = (q = "") => api<{ items: MediaItemDto[] }>(`/media${q}`);
 
 export const brl = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
-export const dateBR = (iso: string | null) => (iso ? iso.split("-").reverse().join("/") : "—");
+export { dateBR } from "./dates";
 export const shortDate = (iso: string) => iso.slice(5).split("-").reverse().join("/"); // "18/09"
 
 export const PAYMENT_LABEL: Record<string, string> = { DEBIT: "débito", PIX: "pix", CREDIT: "crédito", CASH: "dinheiro", BOLETO: "boleto", OTHER: "outro" };

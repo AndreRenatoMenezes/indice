@@ -4,7 +4,7 @@
 // hoje" (atrasadas só andam por ação explícita), e "limpar migradas" para
 // tirar os rastros › quando a semana fica poluída.
 import type { EntryDto } from "@indice/shared";
-import { dateBR } from "@/lib/api";
+import { dateBR } from "@/lib/dates";
 import { SectionLabel } from "../paper";
 import { Empty } from "../ui";
 

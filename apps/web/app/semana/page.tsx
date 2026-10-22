@@ -1,4 +1,5 @@
 import type { EntryDto } from "@indice/shared";
+import { unstable_rethrow } from "next/navigation";
 import { getEntriesRange, getGoals, getHabitsToday, getLists, getRecurrenceRules } from "@/lib/api";
 import { dayOfMonth, isoWeek, monthName, weekOf } from "@/lib/dates";
 import { Card, Empty, Pill, Progress, SketchLine, Stat, WeekDots } from "@/components/ui";
@@ -30,6 +31,7 @@ export default async function Semana({ searchParams }: { searchParams: Promise<{
   try {
     data = await load(date);
   } catch (e) {
+    unstable_rethrow(e);
     return <Card title="API indisponível"><Empty>{String((e as Error).message)}</Empty></Card>;
   }
   const { viewed, today, entries, lists, rules, goals } = data;
