@@ -14,7 +14,7 @@ identificador do Neon é reproduzido aqui.
 | 6 | Migração mergeada em `development` aplicada em QA e ausente na Produção | aprovado | PASSO3; ledger QA contém `aceite_002_noop` finalizada e o ledger da Produção contém apenas `init`. |
 | 7 | Migração com erro falha antes de `gcloud run deploy`, mantendo a revisão anterior | aprovado | `17-build-passos.txt`, `17-build.log`, `17-qa-antes.txt`, `17-qa-depois.txt` e `17-limpeza.txt`: migrate falhou, deploys ficaram `QUEUED`, QA permaneceu saudável e a limpeza terminou `ok`. |
 | 8 | Health QA e chaves cruzadas 200/401, inclusive após reset | aprovado | `13-chaves.txt`, `13-gate.txt`, `16-pos-pr8-health.txt`; PASSO5 confirmou novamente `200/401/200/401` e `/health=200`. |
-| 9 | Web QA anônima responde 403 e proxy carrega a página | pendente-do-usuário | `13-chaves.txt`, `14-iam-web-qa.txt` e `16-pos-pr8-iam.txt` provam 403 anônimo. Falta o usuário confirmar a página pelo proxy `127.0.0.1:3100`. |
+| 9 | Web QA anônima responde 403 e proxy carrega a página | aprovado | `13-chaves.txt`, `14-iam-web-qa.txt` e `16-pos-pr8-iam.txt` provam 403 anônimo. Verificação independente via proxy local `127.0.0.1:3100` (`gcloud run services proxy indice-web-qa`): curl HTTP 200; portal 'Portal' carregou a home (Hoje) e a página da semana (`/semana`) com navegação, 7 colunas de dias e seção de listas. Screenshot registrado em `~/indice-wp04-provas/23-proxy-semana.png`; proxy encerrado e porta 3100 confirmada livre. |
 | 10 | Reset QA recopia dados, reaplica migrações, mantém só a chave QA e devolve dados | aprovado | `18-roteiro-qa-reset.md`; PASSO5 confirmou ledger, `ApiKey=1`, `User=1`, `Habit=4`, `/habits/today` 200 e comprimento igual ao da Produção. |
 | 11 | Senha dos secrets QA diferente da Produção, host Prod recusa e versões antigas não permanecem | aprovado | `18-roteiro-qa-reset.md`; PASSO5 confirmou senha distinta, recusa por autenticação e uma versão não destruída por secret. |
 | 12 | Repositórios separados, limpeza efetiva de 10 versões e nenhuma imagem QA em `indice` | aprovado | `09-prova-a.txt`, `09e-bootstrap-3.txt`, `09e-bootstrap-4.txt`, `16-pos-pr8-imagens.txt` e PASSO5 (`repo_indice_sem_qa=sim`). |
@@ -27,15 +27,15 @@ identificador do Neon é reproduzido aqui.
 
 ## Resumo
 
-- Aprovados: 16
+- Aprovados: 17
 - Aprovados condicionados: 0
 - Reprovados: 0
-- Pendentes do usuário: 1
+- Pendentes do usuário: 0
 - Adiados para WP07: 1
 
-Pendência final do usuário: confirmar a página da web QA pelo proxy local
-`127.0.0.1:3100` (critério 9). A promoção para Produção continua fora da WP06
-e deve ser tratada na WP07.
+O critério 9 foi validado de forma independente pela Reviewer via proxy local
+`127.0.0.1:3100` e portal 'Portal', sem pendências restantes para o usuário na
+WP06. A promoção para Produção pertence à WP07 (já executada e aprovada).
 
 **Nota sobre o deploy do PR #10:** o deploy automático de QA disparado pelo
 merge do PR #10 (commit `f269ca4`) **falhou no CI** — job `node` / step
