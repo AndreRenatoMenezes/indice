@@ -2,21 +2,11 @@
 
 Lanes: planejado → fazendo → revisão → pronto. Contrato em `spec.md` e `plan.md` (Leia). Ordem: WP00 → (WP01 ∥ WP02) → WP03 → WP04 → WP05 → WP06.
 
-### WP05 — Proteção e Environments
-- Lane: planejado (aguarda autorização do usuário; PR #7 já mergeado em `development`; o commit `c895197` e as edições locais de infra ainda precisam de PR novo)
-- Dono: Chewie
-- Possui: configuração do GitHub (branches, Environments)
-- Objetivo: proteção de `development` e `main` (PR, checks `node` e `android`, sem force push, sem bypass); Environments `qa` e `production` (revisor: Andre); apagar `prev` só com OK do usuário no momento.
-- Aceite: critérios de `spec.md` sobre merge bloqueado com CI vermelho e push recusado em `main`.
-- Evidência: configuração lida de volta e tentativa de push recusada.
-- Depende de: WP03 mergeado; autorização do usuário.
-
-### WP06 — Aceite
-- Lane: fazendo (passos 1–5 aprovados pela Ahsoka em 2026-10-21/22: leituras, falha de migração em QA, migração `aceite_002_noop` só em QA, `qa-db-password.sh` (`CRITERIO_SENHA=ok`), `qa-reset.sh` real e leituras pós-reset (`PASSO5=ok`), Produção igual antes/depois; faltam o relatório de aceite por critério da spec e a confirmação do usuário da web de QA pelo proxy)
-- Dono: Ahsoka
+### WP07 — Primeira promoção `development` → `main`
+- Lane: fazendo (autorizada pelo usuário em 2026-10-22; deploy de Produção só com a aprovação do usuário no Environment `production`)
+- Dono: Chewie (PRs) · Obi (branch Neon de segurança) · Ahsoka (verificação)
 - Possui: nenhum arquivo
-- Objetivo: rodar todos os critérios de "Está pronto quando" da spec com os portais.
-- Aceite: todos os itens de `spec.md` com evidência.
-- Evidência: relatório por critério.
-- Depende de: WP04, WP05
-- Provas que a WP04 não produziu e a WP06 exige (lista da Ahsoka, 2026-10-21): primeiro `qa-reset.sh` real com `neonctl branches reset --parent` e data da branch atualizada; `/habits/today` com chave de QA devolvendo dados copiados e contagem de `User` em QA igual à de Produção; repositório `indice` só com imagens de Produção e nenhuma de QA; migração de teste aplicada só em QA; comportamento de falha de migração antes do deploy.
+- Objetivo: publicar a 001 e a 002 em Produção pelo `deploy.yml` de `main`, com migração expand-only (`aceite_002_noop`), branch Neon `pre-promocao-<data>` como segurança e verificação independente depois do deploy.
+- Aceite: critério 5 da `spec.md` (merge em `main` publica Produção somente após aprovação) com revisão nova da API e da web, tag igual ao SHA, `aceite_002_noop` no ledger de Produção, chaves cruzadas 200/401 e `/health` 200.
+- Evidência: run do `deploy.yml`, ledger, revisões e health, sem segredos.
+- Depende de: WP06 aprovada; CI de `development` verde.

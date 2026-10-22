@@ -58,3 +58,21 @@
 - Evidência: provas em `~/indice-wp04-provas` (fora do repo, sem segredo).
 - Depende de: WP02, WP03
 
+### WP05 — Proteção e Environments
+- Lane: pronto (executada pelo Chewie com autorização do usuário em 2026-10-21; proteção e Environments lidos de volta e push recusado em branch-espelho; critérios 2, 3 e 15 aprovados no aceite)
+- Dono: Chewie
+- Possui: configuração do GitHub (branches, Environments)
+- Objetivo: proteção de `development` e `main` (PR, checks `node` e `android`, sem force push, sem bypass); Environments `qa` e `production` (revisor: Andre); apagar `prev` só com OK do usuário no momento.
+- Aceite: critérios de `spec.md` sobre merge bloqueado com CI vermelho e push recusado em `main`.
+- Evidência: configuração lida de volta e tentativa de push recusada.
+- Depende de: WP03 mergeado; autorização do usuário.
+
+### WP06 — Aceite
+- Lane: pronto (ACEITE_FINAL da Ahsoka em 2026-10-22: 16 aprovados, 0 reprovados; pendência do usuário: web de QA pelo proxy; promoção adiada para a WP07). Relatório em `aceite-wp06.md`.
+- Dono: Ahsoka
+- Possui: nenhum arquivo
+- Objetivo: rodar todos os critérios de "Está pronto quando" da spec com os portais.
+- Aceite: todos os itens de `spec.md` com evidência.
+- Evidência: relatório por critério.
+- Depende de: WP04, WP05
+- Provas que a WP04 não produziu e a WP06 exige (lista da Ahsoka, 2026-10-21): primeiro `qa-reset.sh` real com `neonctl branches reset --parent` e data da branch atualizada; `/habits/today` com chave de QA devolvendo dados copiados e contagem de `User` em QA igual à de Produção; repositório `indice` só com imagens de Produção e nenhuma de QA; migração de teste aplicada só em QA; comportamento de falha de migração antes do deploy.

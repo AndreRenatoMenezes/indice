@@ -159,3 +159,11 @@ Entrada: data · autor · decisão · racional · alternativas rejeitadas · cus
 - **Alternativas rejeitadas:** reescrever histórico; deixar a senha como estava.
 - **Custo de reverter:** não se aplica.
 - **Escopo afetado:** Produção (secrets e revisão da API), `docs/deploy-manual.md`, `infra/cloudrun/prod-db-password.sh`.
+
+## 2026-10-22 · Luke (Maestro)
+
+- **Decisão:** o usuário autorizou explicitamente a promoção `development` → `main` (WP07, primeira promoção real, deploy de Produção) para depois que a Ahsoka concluir o aceite final da WP06 sem reprovados, e pediu a lista de branches a apagar. A aprovação do deploy de Produção continua sendo do usuário no Environment `production`. O usuário apaga as branches; ninguém apaga branch sem OK dele no momento. Pré-condições minhas: ACEITE_FINAL sem reprovados; delta de migrações expand-only (só `aceite_002_noop`); branch Neon de segurança `pre-promocao-<data>` criada a partir da principal antes do merge (precaução da Leia, no plano de aceite).
+- **Racional:** pedido do usuário; a promoção publica a 001 inteira mais a 002 em Produção, então só começa com o aceite fechado.
+- **Alternativas rejeitadas:** promover antes do aceite final; apagar branches por conta própria.
+- **Custo de reverter:** médio (`update-traffic` para a revisão anterior; dados pela branch de segurança; migração é inócua).
+- **Escopo afetado:** `main`, Produção, WP07.
