@@ -15,8 +15,11 @@
 #                          com o INDICE_USER_EMAIL dele (sem a variável, vale o
 #                          padrão do seed, andre@indice.local) e aborta se divergir.
 #
-# Os e-mails entram só como argumento; os valores dos secrets de QA são lidos da
-# entrada padrão (sem eco no terminal) e nunca aparecem em argumento ou arquivo.
+# Os e-mails entram só como argumento; os valores dos secrets de QA e das listas
+# de e-mails permitidos (indice-allowed-emails, indice-qa-allowed-emails: e-mails
+# separados por vírgula) são lidos da entrada padrão (sem eco no terminal) e
+# nunca aparecem em argumento ou arquivo. Secret que já tem versão ativa não é
+# lido de novo; para mudar a lista, veja infra/cloudrun/README.md.
 #
 # Variáveis opcionais (padrão entre colchetes):
 #   PROJECT_ID   [indice-509203]
@@ -51,6 +54,8 @@ BUCKET_LISTER_ROLE=indiceBucketLister
 QA_DB_SECRET=indice-qa-database-url
 QA_DB_DIRECT_SECRET=indice-qa-database-url-direct
 QA_API_KEY_SECRET=indice-qa-api-key
+ALLOWED_EMAILS_SECRET=indice-allowed-emails
+QA_ALLOWED_EMAILS_SECRET=indice-qa-allowed-emails
 
 log() { printf '\n==> %s\n' "$*"; }
 exists() { "$@" >/dev/null 2>&1; }
@@ -242,6 +247,12 @@ ensure_secret() {
 ensure_secret "$QA_DB_SECRET" "URL do pooler da branch Neon qa (com ?pgbouncer=true&connection_limit=1)"
 ensure_secret "$QA_DB_DIRECT_SECRET" "URL direta da branch Neon qa"
 ensure_secret "$QA_API_KEY_SECRET" "Chave de API de QA (vazio = gerar)"
+
+log "Secrets das listas de e-mails permitidos (login)"
+# Um por ambiente. O ensure_secret só pede o valor quando o secret ainda não tem
+# versão ativa e dá acesso à conta de runtime da API.
+ensure_secret "$ALLOWED_EMAILS_SECRET" "E-mails permitidos em Produção (separados por vírgula)"
+ensure_secret "$QA_ALLOWED_EMAILS_SECRET" "E-mails permitidos em QA (separados por vírgula)"
 
 log "Jobs indice-seed-qa e indice-rekey-qa"
 # Imagem inicial: a da API de QA, ou a da Produção antes do primeiro deploy de

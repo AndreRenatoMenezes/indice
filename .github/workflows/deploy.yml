@@ -53,7 +53,12 @@ jobs:
               subs="${subs},_WEB_AUTH=--no-allow-unauthenticated"
               subs="${subs},_DB_SECRET=indice-qa-database-url"
               subs="${subs},_DB_DIRECT_SECRET=indice-qa-database-url-direct"
-              subs="${subs},_API_KEY_SECRET=indice-qa-api-key"
+              # Auth URL da branch Neon `qa` (não é segredo); o qa-reset.sh
+              # confere que continua a mesma depois de cada reset. A origem é a
+              # do proxy da web de QA (`gcloud run services proxy ... --port 3100`).
+              subs="${subs},_ALLOWED_EMAILS_SECRET=indice-qa-allowed-emails"
+              subs="${subs},_AUTH_BASE_URL=https://ep-young-glade-acrre8yf.neonauth.sa-east-1.aws.neon.tech/neondb/auth"
+              subs="${subs},_AUTH_WEB_ORIGIN=http://127.0.0.1:3100"
               ;;
             *)
               echo "branch sem ambiente: $GITHUB_REF_NAME" >&2

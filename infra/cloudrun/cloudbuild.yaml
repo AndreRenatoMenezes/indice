@@ -16,7 +16,11 @@
 #                     --no-allow-unauthenticated (QA: web só por IAM).
 #   _DB_SECRET        secret com a URL do pooler.
 #   _DB_DIRECT_SECRET secret com a URL direta.
-#   _API_KEY_SECRET   secret com INDICE_API_KEY_WEB.
+#   _AUTH_BASE_URL    Auth URL do Neon Auth da branch do ambiente (não é segredo).
+#   _AUTH_WEB_ORIGIN  origem da web que o Neon Auth vê (Origin e domínio
+#                     confiável). Vazia em Produção: usa a URL de indice-web.
+#   _ALLOWED_EMAILS_SECRET secret com INDICE_ALLOWED_EMAILS (e-mails permitidos,
+#                     separados por vírgula).
 #   _REPO             repositório do Artifact Registry: indice (Produção) ou
 #                     indice-qa (QA), cada um com a própria limpeza.
 #   _REGION           região.
@@ -58,6 +62,8 @@ steps:
 
   # CORS_ORIGIN = URL da web do mesmo ambiente. No primeiro deploy de um
   # ambiente a web ainda não existe e cai em "*" uma vez.
+  # AUTH_WEB_ORIGIN vem de _AUTH_WEB_ORIGIN; vazia, vale a URL da web. A API
+  # recusa subir em produção sem ela, então sem web e sem origem o build para aqui.
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     id: deploy-api
     entrypoint: bash
@@ -66,11 +72,14 @@ steps:
       - |
         set -euo pipefail
         WEB_URL=$(gcloud run services describe indice-web${_SUFFIX} --region ${_REGION} --format 'value(status.url)' 2>/dev/null || true)
+        AUTH_ORIGIN='${_AUTH_WEB_ORIGIN}'
+        AUTH_ORIGIN=$${AUTH_ORIGIN:-$$WEB_URL}
+        [ -n "$$AUTH_ORIGIN" ] || { echo 'sem _AUTH_WEB_ORIGIN e sem indice-web${_SUFFIX}: passe --substitutions _AUTH_WEB_ORIGIN=<origem>' >&2; exit 1; }
         gcloud run deploy indice-api${_SUFFIX} \
           --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-api:${_TAG} \
           --region ${_REGION} --platform managed \
-          --set-secrets DATABASE_URL=${_DB_SECRET}:latest \
-          --set-env-vars "NODE_ENV=production,TZ=America/Sao_Paulo,CORS_ORIGIN=$${WEB_URL:-*}" \
+          --set-secrets DATABASE_URL=${_DB_SECRET}:latest,INDICE_ALLOWED_EMAILS=${_ALLOWED_EMAILS_SECRET}:latest \
+          --set-env-vars "NODE_ENV=production,TZ=America/Sao_Paulo,CORS_ORIGIN=$${WEB_URL:-*},NEON_AUTH_BASE_URL=${_AUTH_BASE_URL},AUTH_WEB_ORIGIN=$$AUTH_ORIGIN" \
           --min-instances 0 --max-instances 2 --cpu 1 --memory 512Mi \
           --allow-unauthenticated
 
@@ -86,7 +95,7 @@ steps:
           --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-web:${_TAG} \
           --region ${_REGION} --platform managed \
           --set-env-vars API_URL=$$API_URL,NEXT_PUBLIC_API_URL=$$API_URL,NODE_ENV=production \
-          --set-secrets INDICE_API_KEY_WEB=${_API_KEY_SECRET}:latest \
+          --remove-secrets INDICE_API_KEY_WEB \
           --min-instances 0 --max-instances 2 --cpu 1 --memory 512Mi \
           --ingress all \
           ${_WEB_AUTH}
@@ -99,7 +108,9 @@ substitutions:
   _WEB_AUTH: --allow-unauthenticated
   _DB_SECRET: indice-database-url
   _DB_DIRECT_SECRET: indice-database-url-direct
-  _API_KEY_SECRET: indice-api-key
+  _AUTH_BASE_URL: https://ep-gentle-truth-acwejpd3.neonauth.sa-east-1.aws.neon.tech/neondb/auth
+  _AUTH_WEB_ORIGIN: ""
+  _ALLOWED_EMAILS_SECRET: indice-allowed-emails
 
 images:
   - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-api:${_TAG}

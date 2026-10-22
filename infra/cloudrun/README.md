@@ -8,8 +8,9 @@ Dois ambientes no mesmo projeto GCP, na região `southamerica-east1`:
 | Jobs | `indice-migrate`, `indice-seed` | `indice-migrate-qa`, `indice-seed-qa`, `indice-rekey-qa` |
 | Banco (Neon) | branch principal | branch `qa`, filha da principal (cópia dos dados) |
 | Imagens (Artifact Registry) | `indice` | `indice-qa` |
-| Secrets | `indice-database-url`, `indice-database-url-direct`, `indice-api-key` | `indice-qa-database-url`, `indice-qa-database-url-direct`, `indice-qa-api-key` |
-| Web | pública | fechada por IAM (só a conta do Andre, pelo proxy) |
+| Secrets | `indice-database-url`, `indice-database-url-direct`, `indice-api-key`, `indice-allowed-emails` | `indice-qa-database-url`, `indice-qa-database-url-direct`, `indice-qa-api-key`, `indice-qa-allowed-emails` |
+| Neon Auth | habilitado na branch principal | herdado no reset da `qa`; config de QA reaplicada pelo `qa-reset.sh` |
+| Web | pública, com login | fechada por IAM (só a conta do Andre, pelo proxy), com login |
 | Deploy | merge em `main`, após aprovação no Environment `production` | merge em `development` |
 
 Topologia: Cloud Run (escala a zero) + Postgres externo (Neon, plano gratuito) +
@@ -51,7 +52,10 @@ hotfix/*  ──PR (CI verde)──▶ main, depois PR main ──▶ developmen
 3. `prisma migrate deploy` no job `indice-migrate<sufixo>`, pela conexão direta.
    Falhou: o build para e a revisão anterior continua servindo.
 4. Nova revisão da API (`CORS_ORIGIN` = URL da web do mesmo ambiente).
-5. Nova revisão da web, apontando para a API do mesmo ambiente.
+5. Nova revisão da web, apontando para a API do mesmo ambiente. A web não recebe
+   chave de API: ela autentica pelo login (`--remove-secrets INDICE_API_KEY_WEB`
+   tira o secret das revisões antigas; confira no primeiro deploy que o flag não
+   reclama de secret ausente).
 
 Substituições, por ambiente (os padrões do arquivo são os de Produção):
 
@@ -63,7 +67,13 @@ Substituições, por ambiente (os padrões do arquivo são os de Produção):
 | `_WEB_AUTH` | `--allow-unauthenticated` | `--no-allow-unauthenticated` |
 | `_DB_SECRET` | `indice-database-url` | `indice-qa-database-url` |
 | `_DB_DIRECT_SECRET` | `indice-database-url-direct` | `indice-qa-database-url-direct` |
-| `_API_KEY_SECRET` | `indice-api-key` | `indice-qa-api-key` |
+| `_AUTH_BASE_URL` | Auth URL da branch principal (padrão do arquivo) | Auth URL da branch `qa` (`deploy.yml`) |
+| `_AUTH_WEB_ORIGIN` | vazia: usa a URL de `indice-web` | `http://127.0.0.1:3100` (origem do proxy) |
+| `_ALLOWED_EMAILS_SECRET` | `indice-allowed-emails` | `indice-qa-allowed-emails` |
+
+A API recebe `NEON_AUTH_BASE_URL`, `AUTH_WEB_ORIGIN` (env, não são segredos) e
+`INDICE_ALLOWED_EMAILS` (secret). Em produção ela recusa subir sem os três.
+`_API_KEY_SECRET` não existe mais: a web não usa chave.
 
 As imagens de cada ambiente ficam num repositório próprio do Artifact Registry,
 cada um com limpeza que mantém as 10 versões mais recentes de cada imagem.
@@ -115,8 +125,9 @@ o pool/provider de Workload Identity, a conta `gh-deployer` e seus papéis
 (inclui o papel customizado `indiceBucketLister`, só `storage.buckets.list` no
 projeto: o `gcloud builds submit` lista os buckets para checar que
 `<projeto>_cloudbuild` é do projeto), o repositório `indice-qa`, a política de limpeza nos dois repositórios (efetiva,
-fora do modo de teste), os secrets de QA (lendo
-os valores do terminal, sem eco), os jobs `indice-seed-qa` e `indice-rekey-qa`,
+fora do modo de teste), os secrets de QA e os das listas de e-mails
+permitidos, `indice-allowed-emails` e `indice-qa-allowed-emails` (lendo
+os valores do terminal, sem eco; e-mails separados por vírgula), os jobs `indice-seed-qa` e `indice-rekey-qa`,
 e dá `roles/run.invoker` em `indice-web-qa` à sua conta. Os e-mails entram como
 argumento, nunca no repo. Veja o cabeçalho do script para uso e variáveis.
 
@@ -176,7 +187,7 @@ gcloud builds submit --config infra/cloudrun/cloudbuild.yaml \
   --substitutions "_TAG=$(git rev-parse HEAD),_REPO=indice"
 # QA
 gcloud builds submit --config infra/cloudrun/cloudbuild.yaml \
-  --substitutions "_TAG=$(git rev-parse HEAD),_REPO=indice-qa,_SUFFIX=-qa,_WEB_AUTH=--no-allow-unauthenticated,_DB_SECRET=indice-qa-database-url,_DB_DIRECT_SECRET=indice-qa-database-url-direct,_API_KEY_SECRET=indice-qa-api-key"
+  --substitutions "_TAG=$(git rev-parse HEAD),_REPO=indice-qa,_SUFFIX=-qa,_WEB_AUTH=--no-allow-unauthenticated,_DB_SECRET=indice-qa-database-url,_DB_DIRECT_SECRET=indice-qa-database-url-direct,_ALLOWED_EMAILS_SECRET=indice-qa-allowed-emails,_AUTH_BASE_URL=<auth-url-da-branch-qa>,_AUTH_WEB_ORIGIN=http://127.0.0.1:3100"
 ```
 
 Depois do primeiro deploy de QA, rode o `bootstrap.sh` de novo: ele só
@@ -209,13 +220,75 @@ gcloud run jobs deploy indice-seed --image $IMAGE --region $REGION \
 gcloud run jobs execute indice-seed --region $REGION --wait
 ```
 
-A chave de cada ambiente alimenta o `INDICE_API_KEY_WEB` da web desse ambiente
-(o `cloudbuild.yaml` já faz isso) e o `API_KEY` do APK correspondente.
+A chave de cada ambiente serve só a automações (Cloud Scheduler, scripts, curl),
+sempre ligada ao usuário dono. A web e o APK entram pelo login (abaixo).
+
+## Login e lista de e-mails permitidos
+
+Web e Android exigem login com e-mail e senha (Neon Auth, mediado pela API em
+`/auth/*`). Só entra quem tem conta com e-mail verificado **e** o e-mail na
+lista do ambiente (`INDICE_ALLOWED_EMAILS`, conferida em toda requisição). Uma
+conta criada direto no Neon Auth, fora da lista, não recebe nada da API.
+
+A lista é o secret `indice-allowed-emails` (Produção) ou
+`indice-qa-allowed-emails` (QA), e-mails separados por vírgula. Só a API lê o
+secret, na subida da revisão. Para adicionar ou remover uma pessoa, grave a lista
+**inteira** como versão nova e force uma revisão nova da API. O valor é digitado
+no terminal (sem eco), nunca em argumento nem em arquivo do repositório:
+
+```bash
+S=indice-allowed-emails      # QA: indice-qa-allowed-emails
+API=indice-api               # QA: indice-api-qa
+REGION=southamerica-east1
+gcloud secrets versions access latest --secret $S      # lista atual, para editar
+printf 'Lista completa: '; IFS= read -rs LIST; echo
+printf '%s' "$LIST" | gcloud secrets versions add $S --data-file=-; unset LIST
+gcloud run services update $API --region $REGION --update-labels allowlist=$(date +%Y%m%d%H%M)
+```
+
+Quem sai da lista recebe 403 em toda rota assim que a revisão nova sobe (o JWT
+de 15 minutos não ajuda, porque a lista é conferida a cada requisição). Quando
+quiser, desabilite as versões antigas do secret:
+`gcloud secrets versions disable <n> --secret $S`.
+
+### Config do Neon Auth
+
+Por branch Neon (`neonctl neon-auth ...`): e-mail e senha, verificação por código
+no cadastro, remetente "Índice". Produção: Allow Localhost **desligado** e o
+domínio confiável é a URL de `indice-web`. QA: domínio confiável
+`http://127.0.0.1:3100` e Allow Localhost ligado. O `qa-reset.sh` reaplica a de
+QA depois de cada reset.
+
+### APK sem chave
+
+O APK não embute mais a chave de API: o login dá o acesso. O build de release
+exige só `-Pindice.apiBaseUrl` (ver "APK apontando para QA").
+
+### Rotacionar a `indice-api-key` de Produção
+
+O APK antigo leva a chave embutida e continua abrindo a API até ela ser
+rotacionada. Faça **depois** de o APK novo estar instalado no aparelho:
+
+```bash
+REGION=southamerica-east1
+openssl rand -base64 32 | tr -d '\n' | gcloud secrets versions add indice-api-key --data-file=-
+# atualize a chave nos automatismos (ex.: o header do Cloud Scheduler abaixo)
+gcloud run jobs execute indice-seed --region $REGION --wait   # registra a chave nova
+```
+
+O seed só registra a chave nova; a antiga continua válida até o `rekey`, que
+apaga toda `ApiKey` que não seja a do secret. Produção não tem esse job; crie-o
+uma vez, com o mesmo script do `REKEY_SCRIPT` do `bootstrap.sh`, trocando os
+secrets de QA pelos de Produção (`indice-database-url-direct` e
+`indice-api-key`), e execute-o. Depois confira: o APK antigo recebe 401 e o novo
+(login) segue funcionando.
 
 ## Acessar a web de QA
 
-A web de QA mostra uma cópia dos dados reais e não tem login, então não aceita
-acesso anônimo (a URL `*.run.app` responde 403). Pelo Mac, com a sua conta
+A web de QA mostra uma cópia dos dados reais e fica fechada por IAM, então não
+aceita acesso anônimo (a URL `*.run.app` responde 403). Dentro dela há o login
+normal, com a lista de QA; abra sempre pela porta 3100, porque
+`http://127.0.0.1:3100` é a origem confiável do Neon Auth de QA. Pelo Mac, com a sua conta
 Google no `gcloud`:
 
 ```bash
@@ -224,7 +297,9 @@ gcloud run services proxy indice-web-qa --region southamerica-east1 --port 3100
 ```
 
 Não abre no celular. A API de QA continua pública (o APK precisa dela) e exige
-a chave de QA; a chave de Produção não abre QA, e vice-versa.
+login (ou a chave de QA, para automações); a chave de Produção não abre QA, e
+vice-versa. Um login de Produção também não vale em QA: a API confere o emissor
+do JWT, e o `neon_auth` copiado no reset traz as mesmas chaves.
 
 ## Recopiar a Produção para QA: `qa-reset.sh`
 
@@ -234,7 +309,8 @@ infra/cloudrun/qa-reset.sh
 ```
 
 Reseta a branch Neon `qa` a partir da principal (dados de hoje da Produção),
-roda `qa-db-password.sh` (abaixo), `indice-migrate-qa` (reaplica as migrações de `development` que ainda não
+reaplica a config do Neon Auth de QA (domínio confiável, Allow Localhost) e confere
+que a Auth URL da `qa` é a da API de QA (`falhou` e para se divergir), roda `qa-db-password.sh` (abaixo), `indice-migrate-qa` (reaplica as migrações de `development` que ainda não
 estão em Produção), `indice-seed-qa` e `indice-rekey-qa`. O rekey apaga em QA
 toda `ApiKey` que não seja a de QA — a cópia traz o registro da chave de
 Produção.
@@ -289,9 +365,8 @@ gcloud run jobs execute indice-seed-qa --region $REGION --wait    # registra a c
 gcloud run jobs execute indice-rekey-qa --region $REGION --wait   # apaga as outras, inclusive a antiga
 ```
 
-Depois, publique uma revisão nova de `indice-web-qa` (merge em `development` ou
-deploy manual de QA) para a web ler a chave nova, e regere o APK de QA (abaixo):
-a chave antiga para de funcionar no rekey.
+A chave de QA serve só a automações e scripts (a web e o APK usam o login). A
+antiga para de funcionar no rekey.
 
 ## Voltar atrás (rollback)
 
@@ -313,18 +388,16 @@ corrija para frente (nova migração por PR).
 
 ## APK apontando para QA
 
-O CI não publica APK (repo público: o artefato carregaria a chave). Gere
-localmente:
+O CI não publica APK. Gere localmente:
 
 ```bash
 API_QA=$(gcloud run services describe indice-api-qa --region southamerica-east1 --format 'value(status.url)')
-KEY_QA=$(gcloud secrets versions access latest --secret indice-qa-api-key)
 cd apps/android
-./gradlew :app:assembleRelease -Pindice.apiBaseUrl="$API_QA/" -Pindice.apiKey="$KEY_QA"
+./gradlew :app:assembleRelease -Pindice.apiBaseUrl="$API_QA/"
 ```
 
 A barra final da URL é obrigatória (Retrofit). Para Produção, o mesmo com
-`indice-api` e `indice-api-key`.
+`indice-api`. O APK não leva chave: quem entra é quem faz login.
 
 O build de release não tem `signingConfig`: sai
 `app/build/outputs/apk/release/app-release-unsigned.apk`, que o Android só
