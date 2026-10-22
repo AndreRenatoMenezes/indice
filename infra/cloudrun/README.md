@@ -234,7 +234,7 @@ infra/cloudrun/qa-reset.sh
 ```
 
 Reseta a branch Neon `qa` a partir da principal (dados de hoje da Produção),
-roda `indice-migrate-qa` (reaplica as migrações de `development` que ainda não
+roda `qa-db-password.sh` (abaixo), `indice-migrate-qa` (reaplica as migrações de `development` que ainda não
 estão em Produção), `indice-seed-qa` e `indice-rekey-qa`. O rekey apaga em QA
 toda `ApiKey` que não seja a de QA — a cópia traz o registro da chave de
 Produção.
@@ -243,7 +243,41 @@ O reset **não rotaciona** a chave de QA: ela continua sendo a versão `latest`
 de `indice-qa-api-key`, e o APK de QA já instalado segue funcionando.
 
 **Resete só por este script**, nunca pelo painel do Neon: um reset sem o rekey
-deixa a chave de Produção abrindo QA. Se resetou pelo painel, rode o script.
+deixa a chave de Produção abrindo QA, e o reset pelo painel também devolve à `qa`
+a senha de banco da Produção (QA para de conectar, porque o secret tem a senha de
+QA). Se resetou pelo painel, rode o script.
+
+### Senha de banco própria de QA: `qa-db-password.sh`
+
+O Neon copia para a branch filha os papéis **com as mesmas senhas** da mãe, e o
+`reset --parent` copia de novo: sem tratamento, a URL de QA abre a Produção
+trocando só o host. `infra/cloudrun/qa-db-password.sh` troca a senha do
+`neondb_owner` só na branch `qa` (API do Neon), grava versão nova dos dois
+secrets de QA (trocando só a senha na URL, em memória), confere que a senha nova
+difere da de Produção, que o host de QA a aceita e o de Produção a recusa, e só
+então desabilita e destrói as versões antigas (até 3 tentativas de destroy por
+versão) e cria revisão nova de `indice-api-qa`. Imprime só `ok`/`falhou`; a senha
+não passa por argumento, tela nem arquivo. `qa-db-password: ok` só sai com todas
+as versões antigas DESTROYED e a revisão nova criada.
+
+```bash
+NEON_API_KEY=... NEON_PROJECT_ID=... infra/cloudrun/qa-db-password.sh   # da raiz, com npm ci feito
+```
+
+O `qa-reset.sh` já o chama logo depois do reset. Rode à mão uma vez depois de
+criar a branch `qa`, e sempre que a `qa` for resetada fora do script. Rodar de
+novo é sempre seguro: troca a senha outra vez e trata como antiga toda versão não
+destruída (inclusive as já desabilitadas).
+
+Estado que sobra se ele parar no meio:
+
+| Onde parou | Estado | Risco |
+|---|---|---|
+| antes de gravar os secrets (`falhou`) | branch com senha nova, secrets com a antiga | QA não conecta; nada vaza |
+| conferência (`falhou`, ex.: Produção aceitou a credencial) | versões novas gravadas; antigas intactas | pare e avise: nada foi destruído |
+| `INCOMPLETO` no disable | versão antiga ainda ENABLED (lida só por número de versão; o `latest` já é a nova) | a senha de Produção segue no Secret Manager: rode de novo |
+| `INCOMPLETO` no destroy | versões antigas DISABLED (ninguém lê sem reabilitar) | rode de novo para destruir |
+| `INCOMPLETO` na revisão | secrets certos; `indice-api-qa` ainda na revisão anterior (sem conectar) | rode de novo, ou `gcloud run services update indice-api-qa --region southamerica-east1 --update-labels qa-db-password=<agora>` |
 
 ## Rotacionar a chave de QA
 

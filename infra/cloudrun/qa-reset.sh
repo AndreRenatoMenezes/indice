@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Recopia a Produção para QA: reseta a branch Neon `qa` a partir da principal
-# (dados de hoje), reaplica as migrações de QA, roda o seed e o rekey, que deixa
-# só a chave de QA válida. É o único jeito suportado de resetar QA: um reset
+# (dados de hoje), dá à `qa` uma senha de banco própria (qa-db-password.sh: o
+# reset copia as senhas da mãe), reaplica as migrações de QA, roda o seed e o
+# rekey, que deixa só a chave de QA válida. É o único jeito suportado de resetar QA: um reset
 # pelo painel do Neon, sem o rekey, deixa a chave de Produção abrindo QA.
 #
 # Uso:
@@ -10,7 +11,8 @@
 #   infra/cloudrun/qa-reset.sh
 #
 # Requer `gcloud` autenticado, `neonctl` (npm i -g neonctl, lê NEON_API_KEY do
-# ambiente) e `curl`. Pré-requisitos criados pelo primeiro deploy de QA
+# ambiente), `curl`, `node` e `npm ci` feito na raiz (qa-db-password.sh usa o
+# @prisma/client do repo para conferir a credencial). Pré-requisitos criados pelo primeiro deploy de QA
 # (indice-api-qa, indice-migrate-qa) e pelo bootstrap.sh (indice-seed-qa,
 # indice-rekey-qa).
 #
@@ -52,6 +54,11 @@ read -r answer
 
 log "Reset da branch Neon ${NEON_BRANCH} a partir da principal"
 neonctl branches reset "$NEON_BRANCH" --parent --project-id "$NEON_PROJECT_ID"
+
+# O reset copiou de novo as senhas da principal para a `qa`: troca a senha só na
+# `qa` e grava os secrets de QA antes de qualquer job conectar.
+log "Senha de banco própria de QA"
+"$(dirname "$0")/qa-db-password.sh"
 
 log "Jobs de seed e rekey na imagem atual de QA"
 g run jobs update indice-seed-qa --region "$REGION" --image "$IMAGE" >/dev/null
