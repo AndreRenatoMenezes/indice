@@ -4,7 +4,7 @@
 
 | Feature | Domínio | Status |
 |---|---|---|
-| 002-infra-ambientes | infra | spec pronta, plano aprovado |
+| 003-login-multiusuario | auth | spec e plano prontos (aguarda Luke) |
 
 ## Próximas
 

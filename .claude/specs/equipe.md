@@ -8,12 +8,13 @@ Fonte da verdade da partitura. Nomes exatos como aparecem em `maestri list`.
 | Leia | Arquiteto | `.claude/specs/**/{spec,plan}.md`, `schema.md`, `INBOX.md`, `ROADMAP.md` | — |
 | Chewie | Git Master (único com git/GitHub) | git, branches, PRs | — |
 | Rex | Engineer web/API | `apps/web/**`, `apps/api/**`, `packages/**` (quando houver WP) | Portal (web, Cloud Run) |
+| Obi | Engineer DevOps | `.github/workflows/**`, `infra/cloudrun/**`, spike da 003 | — |
+| Cassian | Engineer Android | `apps/android/**` | — |
 | Ahsoka | Reviewer (valida por diff e evidência; sem código) | nenhum | Portal (web, Cloud Run), Pixel 10 |
 
 ## Vagas previstas (ainda não recrutadas)
 
-- Engineer Android: `apps/android/**`. Recrutar quando houver spec Android.
-- Engineer DevOps (role `Engineer-DevOps` criado): `.github/workflows/**`, `infra/cloudrun/**`. Spec 002 pronta; falta recrutar (aguarda escolha de preset).
+- Engineer Android (Cassian, role `Engineer-Android`): `apps/android/**`. Recrutado para a WP05 da 003 (Claude Code).
 
 ## Regras fixas
 

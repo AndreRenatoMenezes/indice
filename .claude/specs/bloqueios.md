@@ -69,3 +69,18 @@ Entrada: data · agente · bloqueio em uma linha · escopo afetado · o que segu
 - **Busca do host da `qa`, só leitura (`19-busca-host.txt`):** 0 ocorrências nos logs dos 3 builds do Cloud Build desde 2026-10-21 e 0 nas revisões do Cloud Run; 9 nos jobs (todas do `indice-migrate-qa`, linha "Datasource ... at <host>" do Prisma), com 0 entradas contendo URL ou credencial; nas provas locais, só o host em `06-create.txt`, `06-conferencia.txt` e `18-roteiro-qa-reset.md`. Logs do Actions: fora do escopo do Obi (pedido ao Chewie).
 - **Dono da decisão:** Leia (opção (a), plan.md emendado); Ahsoka revisa; usuário autoriza a execução.
 - **Resolução (edição local, nada executado):** `infra/cloudrun/qa-db-password.sh` novo (troca a senha só na `qa` por `reset_password`, grava versão nova dos 2 secrets por stdin, confere em memória — relido, ≠ Produção, QA aceita, Produção recusa por autenticação — e só então destrói as versões antigas e cria revisão nova de `indice-api-qa`; só imprime ok/falhou; bash 3.2). `qa-reset.sh` o chama logo depois do `branches reset --parent`. README e `18-roteiro-qa-reset.md` com o passo e o aviso de reset pelo painel. Testes com stubs (sem rede): sucesso; reset sem senha (nada gravado); Produção aceitando (para antes de destruir); falha ao gravar (para com orientação); `NEON_API_KEY` ausente; 0 senhas na saída.
+
+## 2026-10-22 · Luke · onda 1 da 003
+- **Bloqueio:** (1) Obi: o classificador de permissão bloqueou `neonctl neon-auth ...` e `neonctl branches create` (escrita em Produção); o usuário já autorizou a WP01 no chat, mas falta a regra de permissão ou a aprovação no terminal do Obi. (2) Rex: prompt "Allow access to this file?" para `CLAUDE.md` pendente no terminal dele.
+- **Escopo afetado:** WP01 (Obi) e WP02 (Rex); por dependência, WP03–WP06.
+- **Segue andando:** Cassian recrutado e em espera; Leia sem pendência.
+- **Dono da decisão:** usuário (aprovar permissões nos terminais).
+- **Resolução:** pendente.
+
+## 2026-10-22 · Obi · 003 WP01 (classificador nega escrita no Neon Auth)
+- **Bloqueio:** o classificador do modo auto do Claude Code negou duas vezes (sem explicação) o comando que altera a config do Neon Auth em Produção e `qa`, mesmo com a autorização do usuário repassada pelo Luke. Nada foi alterado. Estado lido (só leitura): Auth já habilitado em `production` e `qa`, sem domínios confiáveis; e-mail+senha ligado, verificação `otp`, `Require Verification: false`, `Send Email On Sign Up: false`, remetente "Neon Auth"; não existe branch `dev`.
+- **Comando negado:** `neonctl neon-auth config email-password update --project-id winter-rice-45624313 --branch <production|qa> --enabled true --email-verification-method otp --require-email-verification true --auto-sign-in-after-verification false --send-verification-email-on-sign-up true --disable-sign-up false` (precedido de `neonctl neon-auth domain allow-localhost get` e `email-provider update --help`, no mesmo bloco).
+- **Escopo afetado:** WP01 inteira (config, branch `dev`, spike); por dependência WP03 e WP06.
+- **Segue andando:** WP02.
+- **Dono da decisão:** usuário (regra de permissão Bash para `neonctl neon-auth *` e `neonctl branches create`, ou rodar o comando no terminal com `! `).
+- **Resolução:** pendente.
