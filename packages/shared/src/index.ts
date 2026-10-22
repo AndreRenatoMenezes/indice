@@ -489,3 +489,36 @@ export const DailySummaryDto = z.object({
 export type DailySummaryDto = z.infer<typeof DailySummaryDto>;
 
 export const ErrorDto = z.object({ error: z.string(), details: z.unknown().optional() });
+export type ErrorDto = z.infer<typeof ErrorDto>;
+
+// ── Auth ───────────────────────────────────────────────────────────────────
+export const email = z.string().trim().toLowerCase().email();
+export const password = z.string().min(8).max(128);
+
+export const SignUpInput = z.object({ name: z.string().trim().min(1).max(80), email, password });
+export type SignUpInput = z.infer<typeof SignUpInput>;
+
+export const SignInInput = z.object({ email, password: z.string().min(1) });
+export type SignInInput = z.infer<typeof SignInInput>;
+
+export const VerifyEmailInput = z.object({ email, otp: z.string().regex(/^\d{6}$/) });
+export type VerifyEmailInput = z.infer<typeof VerifyEmailInput>;
+
+export const EmailInput = z.object({ email }); // resend-verification, forgot-password
+export type EmailInput = z.infer<typeof EmailInput>;
+
+export const ResetPasswordInput = z.object({ token: z.string().min(1), newPassword: password });
+export type ResetPasswordInput = z.infer<typeof ResetPasswordInput>;
+
+export const RefreshInput = z.object({ refreshToken: z.string().min(1) }); // também sign-out
+export type RefreshInput = z.infer<typeof RefreshInput>;
+
+export const AccessTokenDto = z.object({ accessToken: z.string(), accessTokenExpiresAt: z.string() }); // ISO
+export type AccessTokenDto = z.infer<typeof AccessTokenDto>;
+
+export const MeDto = z.object({ id: z.string().uuid(), email: z.string(), displayName: z.string() });
+export type MeDto = z.infer<typeof MeDto>;
+
+export const AuthSessionDto = AccessTokenDto.extend({ refreshToken: z.string(), user: MeDto });
+export type AuthSessionDto = z.infer<typeof AuthSessionDto>;
+
