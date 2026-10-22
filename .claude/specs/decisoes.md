@@ -135,3 +135,27 @@ Entrada: data · autor · decisão · racional · alternativas rejeitadas · cus
 - **Alternativas rejeitadas:** pedir ao usuário para digitar o comando (já oferecido; o usuário pediu a correção direta).
 - **Custo de reverter:** baixo (o stash foi consumido; os arquivos voltaram idênticos).
 - **Escopo afetado:** WP06 passo 3 (reinício do Chewie).
+
+## 2026-10-21 · Leia (Arquiteto)
+
+- **Decisão:** opção (a) para a herança de senha do Neon. A senha do papel de QA (`neondb_owner`) é trocada só na branch `qa` por um novo `infra/cloudrun/qa-db-password.sh`. O `qa-reset.sh` o chama logo depois de cada `reset --parent`, e o roteiro o chama uma vez, depois de criar a branch. O script regrava os dois secrets de QA com a senha nova, destrói as versões antigas, força revisão nova de `indice-api-qa` e confere em memória que a senha nova difere da de Produção e que o host de Produção a recusa. Critério novo na spec. O `qa-reset.sh` real da WP06 espera a emenda.
+- **Racional:** o Neon copia papéis e senhas para a branch filha e de novo a cada reset, então qualquer remédio aplicado uma vez só se perde. Com o passo dentro do `qa-reset.sh`, o secret de QA nunca volta a ter a senha de Produção: no pior caso (reset pelo painel), QA fica sem conectar.
+- **Alternativas rejeitadas:** (b) papel próprio de QA. Também some a cada reset e ainda exige conceder posse ou DDL das tabelas de `neondb_owner` para o `prisma migrate`. (c) Dados mascarados ou só o schema mais o seed. Contraria a decisão 6 do usuário (QA com cópia real) e só mudaria com nova pergunta a ele.
+- **Custo de reverter:** baixo (um script e uma chamada). As versões antigas dos secrets destruídas não voltam, mas só guardavam uma cópia da credencial de Produção.
+- **Escopo afetado:** `002-infra-ambientes/spec.md` (garantia e critério novos), `plan.md` (mitigação, WP02, passos 4 e 5 do aceite, riscos); `infra/cloudrun/qa-reset.sh`, `qa-db-password.sh` (novo), `README.md` (roteiro).
+
+## 2026-10-22 · Luke (Maestro)
+
+- **Decisão:** INCIDENTE. `docs/deploy-manual.md` (linhas 150 e 153, commit 0a41786, 2026-09-20) traz connection strings com a senha ATUAL do banco de Produção, em repositório público. A Ahsoka confirmou por comparação em memória: senha igual à de Produção, a credencial conecta hoje (SELECT 1 ok); não é igual à de QA (já rotacionada). O usuário autorizou só PREPARAR o roteiro de rotação da senha de Produção; a execução exige nova autorização explícita. Enquanto não rotacionar, o risco fica aceito e registrado. O histórico não será reescrito (force push proibido); o remédio é a rotação.
+- **Racional:** apagar a linha do arquivo não remove o valor do histórico público.
+- **Alternativas rejeitadas:** reescrever histórico (force push); rotacionar sem roteiro revisado.
+- **Custo de reverter:** não se aplica (nada executado).
+- **Escopo afetado:** Produção (secrets e revisão da API), `docs/deploy-manual.md`, critério 14 da spec (WP06 não fecha até a rotação).
+
+## 2026-10-22 · Luke (Maestro)
+
+- **Decisão:** incidente da credencial em `docs/deploy-manual.md` FECHADO no lado de Produção. Rotação da senha de Produção executada pelo usuário (`prod-db-password.sh` terminou em ok), com a verificação independente da Ahsoka aprovada (`ROTACAO=ok`): senha vazada recusada (P1000), senha nova conecta pelo pooler e pela direta, secrets com uma versão ativa e a antiga destruída, API `indice-api-00004-54v` com `/health` 200, chaves cruzadas 200/401/200/401, ledger de Produção intacto, QA e Produção sem acesso cruzado (teste discriminante: host trocado não alcança o compute oposto). O valor antigo continua no histórico público do git (commit 0a41786), agora inválido. O texto do arquivo é corrigido por PR (placeholders + aviso neutro); o critério 14 só fecha com o merge desse PR em `development`, a cargo do usuário.
+- **Racional:** histórico não é reescrito (force push proibido); a rotação neutraliza a credencial.
+- **Alternativas rejeitadas:** reescrever histórico; deixar a senha como estava.
+- **Custo de reverter:** não se aplica.
+- **Escopo afetado:** Produção (secrets e revisão da API), `docs/deploy-manual.md`, `infra/cloudrun/prod-db-password.sh`.

@@ -12,7 +12,7 @@ Lanes: planejado → fazendo → revisão → pronto. Contrato em `spec.md` e `p
 - Depende de: WP03 mergeado; autorização do usuário.
 
 ### WP06 — Aceite
-- Lane: planejado
+- Lane: fazendo (passos 1–5 aprovados pela Ahsoka em 2026-10-21/22: leituras, falha de migração em QA, migração `aceite_002_noop` só em QA, `qa-db-password.sh` (`CRITERIO_SENHA=ok`), `qa-reset.sh` real e leituras pós-reset (`PASSO5=ok`), Produção igual antes/depois; faltam o relatório de aceite por critério da spec e a confirmação do usuário da web de QA pelo proxy)
 - Dono: Ahsoka
 - Possui: nenhum arquivo
 - Objetivo: rodar todos os critérios de "Está pronto quando" da spec com os portais.
