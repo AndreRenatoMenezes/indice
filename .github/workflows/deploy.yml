@@ -1,0 +1,67 @@
+name: Deploy
+
+# development → QA; main → Produção (o Environment `production` exige aprovação
+# e só aceita a branch main). O deploy roda o CI sobre o próprio commit mergeado
+# e chama infra/cloudrun/cloudbuild.yaml (ver infra/cloudrun/README.md).
+on:
+  push:
+    branches: [development, main]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: ci
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'production' || 'qa' }}
+    # Um deploy por ambiente por vez; enfileira em vez de cancelar, porque
+    # cancelar no meio pode deixar migração aplicada sem revisão nova.
+    concurrency:
+      group: deploy-${{ github.ref_name == 'main' && 'production' || 'qa' }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # Código em src/: o auth grava o arquivo de credencial na raiz do
+      # workspace, que assim fica fora do que o `builds submit` envia.
+      - uses: actions/checkout@v4
+        with:
+          path: src
+
+      # Workload Identity Federation: token OIDC de curta duração, sem chave JSON.
+      - uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Cloud Build
+        run: |
+          case "$GITHUB_REF_NAME" in
+            main)
+              subs="_TAG=${GITHUB_SHA},_REPO=indice"
+              ;;
+            development)
+              subs="_TAG=${GITHUB_SHA},_REPO=indice-qa,_SUFFIX=-qa"
+              subs="${subs},_WEB_AUTH=--no-allow-unauthenticated"
+              subs="${subs},_DB_SECRET=indice-qa-database-url"
+              subs="${subs},_DB_DIRECT_SECRET=indice-qa-database-url-direct"
+              subs="${subs},_API_KEY_SECRET=indice-qa-api-key"
+              ;;
+            *)
+              echo "branch sem ambiente: $GITHUB_REF_NAME" >&2
+              exit 1
+              ;;
+          esac
+          gcloud builds submit --project "$GCP_PROJECT_ID" \
+            --config src/infra/cloudrun/cloudbuild.yaml \
+            --substitutions "$subs" src
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}

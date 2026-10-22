@@ -31,6 +31,27 @@ export function isoWeek(s: ISODate): number {
   return Math.ceil(((thursday.getTime() - jan1.getTime()) / 86_400_000 + 1) / 7);
 }
 
+/** Primeiro dia do mês de `s`. */
+export const firstOfMonth = (s: ISODate): ISODate => `${s.slice(0, 8)}01`;
+
+/** Mesmo dia `n` meses depois (ou antes), limitado ao último dia do mês. */
+export function addMonths(s: ISODate, n: number): ISODate {
+  const [y, m, d] = s.split("-").map(Number) as [number, number, number];
+  const target = new Date(Date.UTC(y, m - 1 + n, 1));
+  const last = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  target.setUTCDate(Math.min(d, last));
+  return iso(target);
+}
+
+/** Semanas (segunda a domingo) que cobrem o mês de `s`, com os dias de borda dos meses vizinhos. */
+export function monthGrid(s: ISODate): ISODate[][] {
+  const first = firstOfMonth(s);
+  const nextMonth = firstOfMonth(addMonths(first, 1));
+  const weeks: ISODate[][] = [];
+  for (let monday = weekOf(first)[0]!; monday < nextMonth; monday = addDays(monday, 7)) weeks.push(weekOf(monday));
+  return weeks;
+}
+
 export const year = (s: ISODate) => Number(s.slice(0, 4));
 export const dayOfMonth = (s: ISODate) => s.slice(8, 10);
 const fmt = (s: ISODate, opts: Intl.DateTimeFormatOptions) => at(s).toLocaleDateString("pt-BR", { ...opts, timeZone: "UTC" });

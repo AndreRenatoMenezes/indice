@@ -53,7 +53,9 @@ curl -H 'X-Api-Key: dev-local-key' 'http://localhost:8080/daily-summary'
 | Rota | Papel |
 |---|---|
 | `GET /daily-summary?date=`, `PUT /daily-log/:date` | Visão diária unificada: bullets, hábitos, finanças, metas, mídia; reflexão do dia |
-| `GET/POST /entries`, `PATCH/DELETE /entries/:id`, `POST /entries/:id/migrate` | Bullets (tarefa/evento/nota, subtarefas, migração •→>) |
+| `GET/POST /entries`, `PATCH/DELETE /entries/:id`, `POST /entries/:id/move`, `POST /entries/:id/migrate`, `POST /entries/:id/duplicate`, `POST /entries/batch` | Bullets (tarefa/evento/nota, subtarefas em árvore): mover entre dias e listas (sair de um dia deixa o rastro ›), reordenar, duplicar e ações em lote (concluir, migrar, apagar, restaurar) |
+| `GET/POST /lists`, `PATCH/DELETE /lists/:id`, `PUT /lists/order` | Listas personalizadas da semana ("Algum dia", "Projetos"), com as tarefas de cada uma |
+| `GET /recurrence-rules`, `PUT /entries/:id/recurrence`, `DELETE /recurrence-rules/:id` | Tarefas repetidas: a regra nasce de uma tarefa de um dia; as ocorrências aparecem ao ler um dia ou intervalo, de hoje em diante; parar apaga as futuras abertas |
 | `GET/POST /habits`, `GET /habits/today`, `PUT/DELETE /habits/:id/log` | Hábitos com régua semanal, sequência e consistência de 30 dias; marcação rápida idempotente por dia (valor omitido = meta atingida) |
 | `GET /finance/summary`, `GET/POST/DELETE /transactions`, `GET/POST /accounts`, `GET /categories`, `GET/POST /institutions`, `POST /institutions/:id/cards`, `GET /invoices`, `POST /invoices/:id/pay` | Financeiro (regras portadas do app-financeiro): compra no crédito cai na fatura do ciclo, conta só move ao pagar |
 | `GET/POST /goals`, `GET/PATCH /goals/:id`, `POST /goals/:id/contributions`, `POST /goals/:id/snapshot`, `GET /goals/:id/export?format=csv` | Metas, aportes, ajuste de alvo/status e export para modelagem |

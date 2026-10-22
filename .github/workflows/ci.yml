@@ -1,9 +1,10 @@
 name: CI
 
+# Em push (development/main) o CI roda dentro do deploy.yml, sobre o commit
+# mergeado; os nomes dos jobs (node, android) são os checks obrigatórios.
 on:
-  push:
-    branches: [main]
   pull_request:
+  workflow_call:
 
 jobs:
   node:

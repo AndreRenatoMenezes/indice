@@ -1,58 +1,78 @@
-# Cloud Build: constrói e publica as duas imagens e faz deploy no Cloud Run.
+# Cloud Build: constrói e publica as duas imagens, migra o banco e faz deploy
+# no Cloud Run. Um arquivo para os dois ambientes; o que muda é o sufixo e os
+# secrets (ver README). O GitHub Actions (`.github/workflows/deploy.yml`) chama
+# este arquivo; o deploy manual usa o mesmo.
 #
-# O banco é um Postgres externo (Neon, Supabase ou outro) — não Cloud SQL.
-# São duas connection strings, em dois secrets: a do pooler para o runtime da
-# API (muitas conexões curtas de um serviço que escala a zero) e a direta para
-# as migrações, que o pooler em modo transação não suporta.
+# O banco é um Postgres externo (Neon) — não Cloud SQL. São duas connection
+# strings, em dois secrets: a do pooler para o runtime da API (muitas conexões
+# curtas de um serviço que escala a zero) e a direta para as migrações, que o
+# pooler em modo transação não suporta.
 #
-# Substituições esperadas: _REGION, _REPO (Artifact Registry), _DB_SECRET
-# (secret com a URL do pooler), _DB_DIRECT_SECRET (secret com a URL direta),
-# _API_KEY_SECRET (secret com INDICE_API_KEY_WEB), _WEB_ORIGIN.
+# Substituições:
+#   _TAG              obrigatória: tag das imagens (SHA completo do commit).
+#                     `$SHORT_SHA` só existe em gatilho do Cloud Build.
+#   _SUFFIX           "" em Produção, "-qa" em QA; vai nos nomes de serviço e job.
+#   _WEB_AUTH         --allow-unauthenticated (Produção) ou
+#                     --no-allow-unauthenticated (QA: web só por IAM).
+#   _DB_SECRET        secret com a URL do pooler.
+#   _DB_DIRECT_SECRET secret com a URL direta.
+#   _API_KEY_SECRET   secret com INDICE_API_KEY_WEB.
+#   _REPO             repositório do Artifact Registry: indice (Produção) ou
+#                     indice-qa (QA), cada um com a própria limpeza.
+#   _REGION           região.
 steps:
+  # Guarda: sem _TAG as imagens sairiam com tag vazia. Roda antes de tudo (os
+  # passos são sequenciais), então nada é publicado.
+  - name: bash
+    id: guard-tag
+    args: ["-c", "[ -n '${_TAG}' ] || { echo '_TAG vazia: passe --substitutions _TAG=<sha>' >&2; exit 1; }"]
   - name: gcr.io/cloud-builders/docker
     id: build-api
-    args: ["build", "-f", "apps/api/Dockerfile", "-t", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-api:$SHORT_SHA", "."]
+    args: ["build", "-f", "apps/api/Dockerfile", "-t", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-api:${_TAG}", "."]
   - name: gcr.io/cloud-builders/docker
     id: build-web
-    args: ["build", "-f", "apps/web/Dockerfile", "-t", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-web:$SHORT_SHA", "."]
+    args: ["build", "-f", "apps/web/Dockerfile", "-t", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-web:${_TAG}", "."]
   - name: gcr.io/cloud-builders/docker
-    args: ["push", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-api:$SHORT_SHA"]
+    args: ["push", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-api:${_TAG}"]
   - name: gcr.io/cloud-builders/docker
-    args: ["push", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-web:$SHORT_SHA"]
+    args: ["push", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-web:${_TAG}"]
 
-  # Migrações via Cloud Run Job efêmero (mesma imagem da API), pela conexão
-  # direta: `prisma migrate deploy` usa DDL e statements preparados.
+  # Migrações via Cloud Run Job (mesma imagem da API), pela conexão direta:
+  # `prisma migrate deploy` usa DDL e statements preparados. Falhou aqui, o
+  # build para e a revisão anterior segue servindo. Por isso as migrações
+  # precisam ser compatíveis com a revisão anterior (expandir, depois contrair).
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     id: migrate
     entrypoint: bash
     args:
       - -c
       - |
-        gcloud run jobs deploy indice-migrate \
-          --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-api:$SHORT_SHA \
+        set -euo pipefail
+        gcloud run jobs deploy indice-migrate${_SUFFIX} \
+          --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-api:${_TAG} \
           --region ${_REGION} \
           --set-secrets DATABASE_URL=${_DB_DIRECT_SECRET}:latest \
           --command npx --args "prisma,migrate,deploy,--schema,packages/db/prisma/schema.prisma" \
           --quiet
-        gcloud run jobs execute indice-migrate --region ${_REGION} --wait
+        gcloud run jobs execute indice-migrate${_SUFFIX} --region ${_REGION} --wait
 
+  # CORS_ORIGIN = URL da web do mesmo ambiente. No primeiro deploy de um
+  # ambiente a web ainda não existe e cai em "*" uma vez.
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     id: deploy-api
-    entrypoint: gcloud
+    entrypoint: bash
     args:
-      - run
-      - deploy
-      - indice-api
-      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-api:$SHORT_SHA
-      - --region=${_REGION}
-      - --platform=managed
-      - --set-secrets=DATABASE_URL=${_DB_SECRET}:latest
-      - --set-env-vars=NODE_ENV=production,TZ=America/Sao_Paulo,CORS_ORIGIN=${_WEB_ORIGIN}
-      - --min-instances=0
-      - --max-instances=2
-      - --cpu=1
-      - --memory=512Mi
-      - --allow-unauthenticated
+      - -c
+      - |
+        set -euo pipefail
+        WEB_URL=$(gcloud run services describe indice-web${_SUFFIX} --region ${_REGION} --format 'value(status.url)' 2>/dev/null || true)
+        gcloud run deploy indice-api${_SUFFIX} \
+          --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-api:${_TAG} \
+          --region ${_REGION} --platform managed \
+          --set-secrets DATABASE_URL=${_DB_SECRET}:latest \
+          --set-env-vars "NODE_ENV=production,TZ=America/Sao_Paulo,CORS_ORIGIN=$${WEB_URL:-*}" \
+          --min-instances 0 --max-instances 2 --cpu 1 --memory 512Mi \
+          --allow-unauthenticated
 
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     id: deploy-web
@@ -60,26 +80,30 @@ steps:
     args:
       - -c
       - |
-        API_URL=$(gcloud run services describe indice-api --region ${_REGION} --format 'value(status.url)')
-        gcloud run deploy indice-web \
-          --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-web:$SHORT_SHA \
+        set -euo pipefail
+        API_URL=$(gcloud run services describe indice-api${_SUFFIX} --region ${_REGION} --format 'value(status.url)')
+        gcloud run deploy indice-web${_SUFFIX} \
+          --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-web:${_TAG} \
           --region ${_REGION} --platform managed \
           --set-env-vars API_URL=$$API_URL,NEXT_PUBLIC_API_URL=$$API_URL,NODE_ENV=production \
           --set-secrets INDICE_API_KEY_WEB=${_API_KEY_SECRET}:latest \
           --min-instances 0 --max-instances 2 --cpu 1 --memory 512Mi \
-          --allow-unauthenticated
+          --ingress all \
+          ${_WEB_AUTH}
 
+# _TAG fica sem padrão de propósito; o passo guard-tag barra o build sem ela.
 substitutions:
   _REGION: southamerica-east1
   _REPO: indice
+  _SUFFIX: ""
+  _WEB_AUTH: --allow-unauthenticated
   _DB_SECRET: indice-database-url
   _DB_DIRECT_SECRET: indice-database-url-direct
   _API_KEY_SECRET: indice-api-key
-  _WEB_ORIGIN: "*"
 
 images:
-  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-api:$SHORT_SHA
-  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-web:$SHORT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-api:${_TAG}
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/indice-web:${_TAG}
 
 options:
   logging: CLOUD_LOGGING_ONLY

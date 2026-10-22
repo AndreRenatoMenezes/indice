@@ -1,62 +1,167 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { prisma, type Entry, type Prisma } from "@indice/db";
-import { CreateEntryInput, UpdateEntryInput, type EntryDto } from "@indice/shared";
+import { Prisma, prisma, type Collection, type Entry } from "@indice/db";
+import { CreateEntryInput, EntryBatchInput, MoveEntryInput, UpdateEntryInput, isoDate, type EntryDto } from "@indice/shared";
 import { parse, dateOrNull } from "../lib/http.js";
-import { fromISODate, todayISO } from "../lib/dates.js";
+import { daysBetween, fromISODate, todayISO } from "../lib/dates.js";
 import { config } from "../config.js";
-import { sortEntries } from "../modules/journal/ordering.js";
+import { reposition, sortEntries } from "../modules/journal/ordering.js";
+import { canLeaveCollection, duplicateCopy, migrationCopy, moveKind } from "../modules/journal/moves.js";
+import { materializeRecurrences } from "./recurrence.js";
+
+// Teto do intervalo `?from&to`: cobre um mês com as semanas de borda.
+const MAX_RANGE_DAYS = 62;
 
 export function toEntryDto(e: Entry, children?: Entry[]): EntryDto {
   return {
     id: e.id, collectionId: e.collectionId, parentId: e.parentId, kind: e.kind, status: e.status,
     text: e.text, description: e.description, date: dateOrNull(e.date), time: e.time, alarm: e.alarm,
     priority: e.priority, color: e.color, tags: e.tags, position: e.position, goalId: e.goalId, mediaItemId: e.mediaItemId,
+    recurrenceRuleId: e.recurrenceRuleId,
     children: children ? sortEntries(children).map((c) => toEntryDto(c)) : undefined,
   };
 }
 
 // Garante a Collection DAILY de uma data (cria sob demanda, como o WeekToDo
 // criava a lista "YYYYMMDD" ao abrir o dia).
+// Em corrida (outra requisição criou o dia no meio do upsert: P2002), lê a que ficou.
 export async function ensureDailyCollection(userId: string, date: string) {
   const d = fromISODate(date);
-  return prisma.collection.upsert({
-    where: { userId_kind_date: { userId, kind: "DAILY", date: d } },
-    update: {},
-    create: { userId, kind: "DAILY", date: d, name: date },
-  });
+  const where = { userId_kind_date: { userId, kind: "DAILY" as const, date: d } };
+  try {
+    return await prisma.collection.upsert({ where, update: {}, create: { userId, kind: "DAILY", date: d, name: date } });
+  } catch (e) {
+    if (!(e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")) throw e;
+    return prisma.collection.findUniqueOrThrow({ where });
+  }
 }
 
+// Raízes (em ordem de data e, dentro do dia, pela regra 1B) com as subtarefas em `children`.
+export function entryTree(rows: Entry[]): EntryDto[] {
+  const byParent = new Map<string | null, Entry[]>();
+  for (const r of rows) byParent.set(r.parentId, [...(byParent.get(r.parentId) ?? []), r]);
+  const roots = sortEntries(byParent.get(null) ?? []).sort((a, b) => (a.date?.getTime() ?? 0) - (b.date?.getTime() ?? 0));
+  return roots.map((r) => toEntryDto(r, byParent.get(r.id) ?? []));
+}
+
+// Também atende o `/daily-summary` (Diário e Android): as repetições do dia nascem aqui.
 export async function listEntriesForDate(userId: string, date: string): Promise<{ collectionId: string | null; entries: EntryDto[] }> {
+  await materializeRecurrences(userId, date, date);
   const collection = await prisma.collection.findUnique({ where: { userId_kind_date: { userId, kind: "DAILY", date: fromISODate(date) } } });
   if (!collection) return { collectionId: null, entries: [] };
   const rows = await prisma.entry.findMany({ where: { collectionId: collection.id, deletedAt: null }, orderBy: { position: "asc" } });
-  const byParent = new Map<string | null, Entry[]>();
-  for (const r of rows) byParent.set(r.parentId, [...(byParent.get(r.parentId) ?? []), r]);
-  const roots = sortEntries(byParent.get(null) ?? []);
-  return { collectionId: collection.id, entries: roots.map((r) => toEntryDto(r, byParent.get(r.id) ?? [])) };
+  return { collectionId: collection.id, entries: entryTree(rows) };
+}
+
+export async function listEntriesInRange(userId: string, from: string, to: string): Promise<EntryDto[]> {
+  await materializeRecurrences(userId, from, to);
+  const rows = await prisma.entry.findMany({
+    where: { userId, deletedAt: null, date: { gte: fromISODate(from), lte: fromISODate(to) } },
+    orderBy: [{ date: "asc" }, { position: "asc" }],
+  });
+  return entryTree(rows);
+}
+
+export async function listEntriesInCollection(userId: string, collectionId: string): Promise<EntryDto[]> {
+  const rows = await prisma.entry.findMany({ where: { userId, collectionId, deletedAt: null }, orderBy: { position: "asc" } });
+  return entryTree(rows);
+}
+
+async function withChildren(e: Entry): Promise<EntryDto> {
+  const children = await prisma.entry.findMany({ where: { parentId: e.id, deletedAt: null } });
+  return toEntryDto(e, children);
+}
+
+type Tx = Prisma.TransactionClient;
+type EntryWithChildren = Entry & { children: Entry[] };
+
+// Grava as posições que `reposition` mudou entre as irmãs (mesma coleção e mesma mãe).
+async function placeAmongSiblings(tx: Tx, collectionId: string, parentId: string | null, id: string, beforeId: string | null | undefined) {
+  const siblings = await tx.entry.findMany({ where: { collectionId, parentId, deletedAt: null }, select: { id: true, status: true, time: true, position: true } });
+  for (const c of reposition(siblings, id, beforeId)) await tx.entry.update({ where: { id: c.id }, data: { position: c.position } });
+}
+
+async function nextPosition(tx: Tx, collectionId: string): Promise<number> {
+  const last = await tx.entry.aggregate({ where: { collectionId, parentId: null }, _max: { position: true } });
+  return (last._max.position ?? -1) + 1;
+}
+
+// Sair de um dia: cópia no destino (com as subtarefas abertas) e rastro › na origem.
+export async function migrateInto(tx: Tx, userId: string, src: EntryWithChildren, dest: Collection, beforeId?: string | null): Promise<Entry> {
+  const { entry, children } = migrationCopy(src, src.children.filter((c) => !c.deletedAt), { collectionId: dest.id, date: dest.date });
+  // `migratedFromId` é único: se a origem já foi migrada, reaberta e sai de novo, o rastro passa para a cópia nova.
+  await tx.entry.updateMany({ where: { migratedFromId: src.id }, data: { migratedFromId: null } });
+  const copy = await tx.entry.create({
+    data: { ...entry, userId, position: await nextPosition(tx, dest.id), children: { create: children.map((c) => ({ ...c, userId })) } },
+  });
+  await tx.entry.update({ where: { id: src.id }, data: { status: "MIGRATED" } });
+  await placeAmongSiblings(tx, dest.id, null, copy.id, beforeId);
+  return tx.entry.findUniqueOrThrow({ where: { id: copy.id } });
+}
+
+// Sair de uma lista: a própria entrada (e as subtarefas) muda de coleção, sem rastro.
+async function relocateInto(tx: Tx, src: Entry, dest: Collection, beforeId?: string | null): Promise<Entry> {
+  await tx.entry.update({ where: { id: src.id }, data: { collectionId: dest.id, date: dest.date, position: await nextPosition(tx, dest.id) } });
+  await tx.entry.updateMany({ where: { parentId: src.id }, data: { collectionId: dest.id, date: dest.date } });
+  await placeAmongSiblings(tx, dest.id, null, src.id, beforeId);
+  return tx.entry.findUniqueOrThrow({ where: { id: src.id } });
+}
+
+export type MoveResult = { ok: true; entry: Entry } | { ok: false; code: 400 | 404 | 409; error: string };
+
+// Um só caminho para reordenar, migrar (origem é um dia) e realocar (origem é uma lista).
+export async function moveEntry(userId: string, id: string, input: MoveEntryInput): Promise<MoveResult> {
+  const entry = await prisma.entry.findFirst({
+    where: { id, userId, deletedAt: null },
+    include: { collection: true, children: { where: { deletedAt: null } } },
+  });
+  if (!entry) return { ok: false, code: 404, error: "not found" };
+  if (entry.parentId && (input.date || input.collectionId)) return { ok: false, code: 400, error: "subtarefa só reordena dentro da tarefa" };
+
+  let dest: Collection = entry.collection;
+  if (input.date) dest = await ensureDailyCollection(userId, input.date);
+  else if (input.collectionId) {
+    const list = await prisma.collection.findFirst({ where: { id: input.collectionId, userId, kind: "CUSTOM", deletedAt: null } });
+    if (!list) return { ok: false, code: 404, error: "list not found" };
+    dest = list;
+  }
+
+  const kind = moveKind(entry.collection, dest);
+  if (kind !== "reorder" && !canLeaveCollection(entry)) return { ok: false, code: 409, error: "só tarefa aberta e raiz muda de lugar" };
+
+  const moved = await prisma.$transaction(async (tx) => {
+    if (kind === "migrate") return migrateInto(tx, userId, entry, dest, input.beforeId);
+    if (kind === "relocate") return relocateInto(tx, entry, dest, input.beforeId);
+    await placeAmongSiblings(tx, entry.collectionId, entry.parentId, entry.id, input.beforeId);
+    return tx.entry.findUniqueOrThrow({ where: { id: entry.id } });
+  });
+  return { ok: true, entry: moved };
 }
 
 export async function entriesRoutes(app: FastifyInstance) {
-  // GET /entries?date=YYYY-MM-DD | ?collectionId=… | ?status=OPEN&before=YYYY-MM-DD
+  // GET /entries?date=YYYY-MM-DD | ?from&to | ?collectionId=… | ?status=OPEN&before=YYYY-MM-DD
   app.get("/entries", async (req, reply) => {
     const q = parse(z.object({
-      date: z.string().optional(), collectionId: z.string().optional(),
-      status: z.string().optional(), before: z.string().optional(),
-      from: z.string().optional(), to: z.string().optional(),
+      date: isoDate.optional(), collectionId: z.string().optional(),
+      status: z.string().optional(), before: isoDate.optional(),
+      from: isoDate.optional(), to: isoDate.optional(),
     }), req.query, reply);
     if (!q) return;
     if (q.date) return listEntriesForDate(req.userId, q.date);
+
+    // Intervalo fechado, para montar a semana numa chamada só (árvore, como `?date=`).
+    if (q.from || q.to) {
+      if (!q.from || !q.to) return reply.code(400).send({ error: "from e to vêm juntos" });
+      const span = daysBetween(q.from, q.to);
+      if (span < 0 || span > MAX_RANGE_DAYS) return reply.code(400).send({ error: `intervalo de 0 a ${MAX_RANGE_DAYS} dias` });
+      return { entries: await listEntriesInRange(req.userId, q.from, q.to) };
+    }
+    if (q.collectionId && !q.status && !q.before) return { entries: await listEntriesInCollection(req.userId, q.collectionId) };
 
     const where: Prisma.EntryWhereInput = { userId: req.userId, deletedAt: null, parentId: null };
     if (q.collectionId) where.collectionId = q.collectionId;
     if (q.status) where.status = q.status as Entry["status"];
     if (q.before) where.date = { lt: fromISODate(q.before) };
-    // Intervalo fechado, para montar a semana do spread numa chamada só.
-    if (q.from || q.to) where.date = {
-      ...(q.from ? { gte: fromISODate(q.from) } : {}),
-      ...(q.to ? { lte: fromISODate(q.to) } : {}),
-    };
     const rows = await prisma.entry.findMany({ where, orderBy: [{ date: "asc" }, { position: "asc" }], take: 500 });
     return { entries: sortEntries(rows).map((r) => toEntryDto(r)) };
   });
@@ -99,7 +204,7 @@ export async function entriesRoutes(app: FastifyInstance) {
     const existing = await prisma.entry.findFirst({ where: { id, userId: req.userId, deletedAt: null } });
     if (!existing) return reply.code(404).send({ error: "not found" });
     const data: Prisma.EntryUpdateInput = {};
-    for (const k of ["text", "description", "time", "alarm", "priority", "color", "tags", "kind", "status", "position"] as const) {
+    for (const k of ["text", "description", "time", "alarm", "priority", "color", "tags", "kind", "status"] as const) {
       if (body[k] !== undefined) (data as Record<string, unknown>)[k] = body[k];
     }
     if (body.goalId !== undefined) data.goal = body.goalId ? { connect: { id: body.goalId } } : { disconnect: true };
@@ -110,32 +215,92 @@ export async function entriesRoutes(app: FastifyInstance) {
     return toEntryDto(updated);
   });
 
-  // Migração de bullet (• → >): cria cópia na data-alvo e marca a origem como MIGRATED.
+  // Reordenar no mesmo lugar, migrar de um dia (deixa rastro ›) ou realocar de uma lista (sem rastro).
+  app.post("/entries/:id/move", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = parse(MoveEntryInput, req.body, reply);
+    if (!body) return;
+    const r = await moveEntry(req.userId, id, body);
+    if (!r.ok) return reply.code(r.code).send({ error: r.error });
+    return withChildren(r.entry);
+  });
+
+  // Migração de bullet (• → >), usada pelo Diário e pelo Android: atalho de
+  // "mover para a data, no fim das manuais".
   app.post("/entries/:id/migrate", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const body = parse(z.object({ date: z.string() }), req.body, reply);
+    const body = parse(z.object({ date: isoDate }), req.body, reply);
     if (!body) return;
-    const src = await prisma.entry.findFirst({ where: { id, userId: req.userId, deletedAt: null }, include: { children: true } });
-    if (!src) return reply.code(404).send({ error: "not found" });
-    const target = await ensureDailyCollection(req.userId, body.date);
-    const result = await prisma.$transaction(async (tx) => {
-      const last = await tx.entry.aggregate({ where: { collectionId: target.id, parentId: null }, _max: { position: true } });
-      const copy = await tx.entry.create({
-        data: {
-          userId: req.userId, collectionId: target.id, kind: src.kind, text: src.text, description: src.description, date: target.date,
-          time: src.time, alarm: src.alarm, priority: src.priority, color: src.color, tags: src.tags, goalId: src.goalId,
-          mediaItemId: src.mediaItemId, position: (last._max.position ?? -1) + 1, migratedFromId: src.id, source: "SYSTEM",
-          children: {
-            create: src.children.filter((c) => c.status === "OPEN").map((c, i) => ({
-              userId: req.userId, collectionId: target.id, kind: c.kind, text: c.text, date: target.date, position: i, source: "SYSTEM" as const,
-            })),
-          },
-        },
+    const r = await moveEntry(req.userId, id, { date: body.date, beforeId: null });
+    // Aqui subtarefa também é "não pode sair" (409), não pedido malformado.
+    if (!r.ok) return reply.code(r.code === 400 ? 409 : r.code).send({ error: r.error });
+    return reply.code(201).send(await withChildren(r.entry));
+  });
+
+  // Ações sobre vários ids de uma vez: concluir todas, adiar/migrar pendentes,
+  // apagar (rastros, "limpar migradas") e restaurar ("desfazer"). Responde só
+  // os ids afetados; ids de outro usuário são ignorados.
+  app.post("/entries/batch", async (req, reply) => {
+    const body = parse(EntryBatchInput, req.body, reply);
+    if (!body) return;
+    const mine = { id: { in: body.ids }, userId: req.userId };
+
+    if (body.action === "complete") {
+      const ids = await prisma.$transaction(async (tx) => {
+        const rows = await tx.entry.findMany({ where: { ...mine, deletedAt: null, parentId: null, status: "OPEN" }, select: { id: true } });
+        const ids = rows.map((r) => r.id);
+        await tx.entry.updateMany({ where: { id: { in: ids } }, data: { status: "DONE", completedAt: new Date() } });
+        return ids;
       });
-      await tx.entry.update({ where: { id: src.id }, data: { status: "MIGRATED" } });
-      return copy;
+      return { ids };
+    }
+
+    if (body.action === "migrate") {
+      const dest = await ensureDailyCollection(req.userId, body.date);
+      const ids = await prisma.$transaction(async (tx) => {
+        const rows = await tx.entry.findMany({
+          where: { ...mine, deletedAt: null, parentId: null, status: "OPEN" },
+          include: { collection: true, children: { where: { deletedAt: null } } },
+          orderBy: [{ date: "asc" }, { position: "asc" }],
+        });
+        const moved: string[] = [];
+        for (const src of rows) {
+          const kind = moveKind(src.collection, dest);
+          if (kind === "reorder") continue;
+          if (kind === "migrate") await migrateInto(tx, req.userId, src, dest, null);
+          else await relocateInto(tx, src, dest, null);
+          moved.push(src.id);
+        }
+        return moved;
+      });
+      return { ids };
+    }
+
+    const deleting = body.action === "delete";
+    const ids = await prisma.$transaction(async (tx) => {
+      const rows = await tx.entry.findMany({ where: { ...mine, deletedAt: deleting ? null : { not: null } }, select: { id: true } });
+      const ids = rows.map((r) => r.id);
+      await tx.entry.updateMany({ where: { id: { in: ids } }, data: { deletedAt: deleting ? new Date() : null } });
+      return ids;
     });
-    return reply.code(201).send(toEntryDto(result));
+    return { ids };
+  });
+
+  // Nova tarefa aberta no mesmo lugar, no fim, com todas as subtarefas reabertas.
+  app.post("/entries/:id/duplicate", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const src = await prisma.entry.findFirst({ where: { id, userId: req.userId, deletedAt: null }, include: { children: { where: { deletedAt: null } } } });
+    if (!src) return reply.code(404).send({ error: "not found" });
+    if (src.parentId) return reply.code(400).send({ error: "subtarefa não se duplica" });
+    const { entry, children } = duplicateCopy(src, src.children);
+    const copy = await prisma.$transaction(async (tx) => {
+      const created = await tx.entry.create({
+        data: { ...entry, userId: req.userId, position: await nextPosition(tx, src.collectionId), children: { create: children.map((c) => ({ ...c, userId: req.userId })) } },
+      });
+      await placeAmongSiblings(tx, src.collectionId, null, created.id, null);
+      return tx.entry.findUniqueOrThrow({ where: { id: created.id } });
+    });
+    return reply.code(201).send(await withChildren(copy));
   });
 
   app.delete("/entries/:id", async (req, reply) => {
