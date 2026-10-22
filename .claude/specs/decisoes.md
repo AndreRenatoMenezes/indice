@@ -167,3 +167,10 @@ Entrada: data · autor · decisão · racional · alternativas rejeitadas · cus
 - **Alternativas rejeitadas:** promover antes do aceite final; apagar branches por conta própria.
 - **Custo de reverter:** médio (`update-traffic` para a revisão anterior; dados pela branch de segurança; migração é inócua).
 - **Escopo afetado:** `main`, Produção, WP07.
+
+## 2026-10-22 · Luke (Maestro)
+
+- **Decisão:** spec 002-infra-ambientes encerrada do lado dos agentes. WP00–WP07 em `tasks-done.md`. A primeira promoção `development` → `main` (PR #12) foi feita com autorização do usuário, que aprovou o deploy no Environment `production`; a Ahsoka verificou de forma independente a Produção depois (`WP07=ok`). A interface do GitHub mostrou o job `deploy` como "queued" por cerca de 15 minutos, enquanto o Cloud Run já estava nas revisões novas; a prova veio do GCP e o job fechou como `completed/success`. Fica como melhoria (INBOX da Leia): fonte local no web (`next/font/local`), porque o build depende do Google Fonts e falhou uma vez por erro transitório.
+- **Pendências do usuário:** critério 9 (web de QA pelo proxy), revogar a `NEON_API_KEY` e apagar o item do Keychain, apagar as branches mergeadas, apagar a branch Neon `pre-promocao-20261022` após 7 dias estável.
+- **Custo de reverter:** `update-traffic` para `indice-api-00004-54v` e `indice-web-00003-c65`; dados pela branch Neon de segurança.
+- **Escopo afetado:** 002-infra-ambientes.

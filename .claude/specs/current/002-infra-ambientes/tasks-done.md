@@ -76,3 +76,12 @@
 - Evidência: relatório por critério.
 - Depende de: WP04, WP05
 - Provas que a WP04 não produziu e a WP06 exige (lista da Ahsoka, 2026-10-21): primeiro `qa-reset.sh` real com `neonctl branches reset --parent` e data da branch atualizada; `/habits/today` com chave de QA devolvendo dados copiados e contagem de `User` em QA igual à de Produção; repositório `indice` só com imagens de Produção e nenhuma de QA; migração de teste aplicada só em QA; comportamento de falha de migração antes do deploy.
+
+### WP07 — Primeira promoção `development` → `main`
+- Lane: pronto (WP07=ok da Ahsoka em 2026-10-22: PR #12 mergeado em `main` (9436685), deploy de Produção aprovado pelo usuário no Environment `production`; `indice-api-00005-sm6` e `indice-web-00004-b8g` com a tag igual ao SHA do merge; `aceite_002_noop` no ledger de Produção; User=1 Habit=4 preservados; chaves cruzadas 200/401/200/401; exposição pública preservada; QA intacto; branch Neon `pre-promocao-20261022` ativa)
+- Dono: Chewie (PRs) · Obi (branch Neon de segurança) · Ahsoka (verificação)
+- Possui: nenhum arquivo
+- Objetivo: publicar a 001 e a 002 em Produção pelo `deploy.yml` de `main`, com migração expand-only (`aceite_002_noop`), branch Neon `pre-promocao-<data>` como segurança e verificação independente depois do deploy.
+- Aceite: critério 5 da `spec.md` (merge em `main` publica Produção somente após aprovação) com revisão nova da API e da web, tag igual ao SHA, `aceite_002_noop` no ledger de Produção, chaves cruzadas 200/401 e `/health` 200.
+- Evidência: run do `deploy.yml`, ledger, revisões e health, sem segredos.
+- Depende de: WP06 aprovada; CI de `development` verde.
