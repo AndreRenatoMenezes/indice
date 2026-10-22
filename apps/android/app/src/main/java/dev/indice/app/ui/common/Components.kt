@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -60,7 +61,7 @@ object Tones {
 }
 
 @Composable
-fun ScreenHeader(kicker: String, title: String, pill: (@Composable () -> Unit)? = null, onRefresh: (() -> Unit)? = null) {
+fun ScreenHeader(kicker: String, title: String, pill: (@Composable () -> Unit)? = null, onRefresh: (() -> Unit)? = null, onSignOut: (() -> Unit)? = null) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(kicker, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -68,6 +69,7 @@ fun ScreenHeader(kicker: String, title: String, pill: (@Composable () -> Unit)? 
         }
         pill?.invoke()
         if (onRefresh != null) IconButton(onClick = onRefresh) { Icon(Icons.Default.Refresh, contentDescription = "Atualizar") }
+        if (onSignOut != null) IconButton(onClick = onSignOut) { Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Sair") }
     }
 }
 

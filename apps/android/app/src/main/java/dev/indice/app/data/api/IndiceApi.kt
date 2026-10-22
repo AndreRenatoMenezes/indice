@@ -9,8 +9,33 @@ import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
 
-/** Cliente Retrofit da API do Índice. Autenticação via interceptor (X-Api-Key). */
+/** Cliente Retrofit da API do Índice. Autenticação via interceptor (Bearer da SessionStore). */
 interface IndiceApi {
+    // Auth (públicas, sem Bearer)
+    @POST("auth/sign-up")
+    suspend fun signUp(@Body body: SignUpInput)
+
+    @POST("auth/verify-email")
+    suspend fun verifyEmail(@Body body: VerifyEmailInput)
+
+    @POST("auth/resend-verification")
+    suspend fun resendVerification(@Body body: EmailInput)
+
+    @POST("auth/sign-in")
+    suspend fun signIn(@Body body: SignInInput): AuthSessionDto
+
+    @POST("auth/refresh")
+    suspend fun refresh(@Body body: RefreshInput): AccessTokenDto
+
+    @POST("auth/sign-out")
+    suspend fun signOut(@Body body: RefreshInput)
+
+    @POST("auth/forgot-password")
+    suspend fun forgotPassword(@Body body: EmailInput)
+
+    @GET("me")
+    suspend fun me(): MeDto
+
     @GET("daily-summary")
     suspend fun dailySummary(@Query("date") date: String? = null): DailySummaryDto
 

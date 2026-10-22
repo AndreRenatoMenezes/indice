@@ -1,6 +1,12 @@
 package dev.indice.app.data.repository
 
 import dev.indice.app.data.api.AccountDto
+import dev.indice.app.data.api.EmailInput
+import dev.indice.app.data.api.RefreshInput
+import dev.indice.app.data.api.SignInInput
+import dev.indice.app.data.api.SignUpInput
+import dev.indice.app.data.api.VerifyEmailInput
+import dev.indice.app.data.auth.SessionStore
 import dev.indice.app.data.api.CategoryDto
 import dev.indice.app.data.api.ContributeGoalRequest
 import dev.indice.app.data.api.CreateEntryRequest
@@ -32,25 +38,67 @@ import retrofit2.HttpException
 import java.io.IOException
 
 /** Erro da API já legível para a tela ("TRANSFER exige accountId…", "sem conexão"). */
-class ApiException(message: String, val status: Int? = null) : Exception(message)
+class ApiException(message: String, val status: Int? = null, val serverError: String? = null) : Exception(message)
 
 /**
  * Fachada única sobre a API. Quando entrar o modo offline, é aqui que o Room
  * e a fila de sync (merge de 3 vias herdado do WeekToDo Journal) se encaixam,
  * sem mudar as telas.
  */
-class IndiceRepository(private val api: IndiceApi) {
+class IndiceRepository(private val api: IndiceApi, private val session: SessionStore) {
     private val json = Json { ignoreUnknownKeys = true }
 
     /** Converte HttpException/IOException em ApiException com a mensagem do servidor. */
-    suspend fun <T> call(block: suspend IndiceApi.() -> T): T = try {
+    private suspend fun <T> request(block: suspend IndiceApi.() -> T): T = try {
         api.block()
     } catch (e: HttpException) {
         val body = e.response()?.errorBody()?.string()
-        val msg = body?.let { runCatching { json.decodeFromString<ErrorResponse>(it).error }.getOrNull() } ?: "HTTP ${e.code()}"
-        throw ApiException(msg, e.code())
+        val server = body?.let { runCatching { json.decodeFromString<ErrorResponse>(it).error }.getOrNull() }
+        throw ApiException(server ?: "HTTP ${e.code()}", e.code(), server)
     } catch (e: IOException) {
         throw ApiException("Sem conexão com a API (${e.message ?: e::class.simpleName})")
+    }
+
+    /** Chamada de dados: 403 com sessão ativa é acesso removido, e a navegação mostra a tela própria. */
+    suspend fun <T> call(block: suspend IndiceApi.() -> T): T = try {
+        request(block)
+    } catch (e: ApiException) {
+        if (e.status == 403) session.markDenied()
+        throw e
+    }
+
+    // ── Sessão
+    /** Chamada de auth: a mensagem do servidor (em inglês) vira texto de tela. */
+    private suspend fun <T> authCall(block: suspend IndiceApi.() -> T): T = try {
+        request(block)
+    } catch (e: ApiException) {
+        val text = when {
+            e.status == null -> e.message
+            e.serverError == "invalid credentials" -> "E-mail ou senha incorretos"
+            e.serverError == "not allowed" -> "E-mail não autorizado"
+            e.serverError == "email not verified" -> "E-mail ainda não verificado"
+            e.serverError == "email already registered" -> "E-mail já cadastrado"
+            e.serverError == "invalid code" -> "Código inválido"
+            e.status == 429 -> "Muitas tentativas, aguarde um minuto"
+            e.status == 502 || e.serverError == "auth unavailable" || e.serverError == "auth not configured" ->
+                "Serviço de login indisponível, tente de novo"
+            e.status == 400 -> "Dados inválidos"
+            else -> e.message
+        }
+        throw ApiException(text ?: "Erro", e.status, e.serverError)
+    }
+
+    suspend fun signIn(email: String, password: String) = session.save(authCall { signIn(SignInInput(email, password)) })
+    suspend fun signUp(name: String, email: String, password: String) = authCall { signUp(SignUpInput(name, email, password)) }
+    suspend fun verifyEmail(email: String, otp: String) = authCall { verifyEmail(VerifyEmailInput(email, otp)) }
+    suspend fun resendVerification(email: String) = authCall { resendVerification(EmailInput(email)) }
+    suspend fun forgotPassword(email: String) = authCall { forgotPassword(EmailInput(email)) }
+
+    /** Encerra a sessão no servidor (melhor esforço) e sempre limpa a local. */
+    suspend fun signOut() {
+        val refresh = session.current()?.refreshToken
+        if (refresh != null) runCatching { api.signOut(RefreshInput(refresh)) }
+        session.clear()
     }
 
     // ── Hoje / journal

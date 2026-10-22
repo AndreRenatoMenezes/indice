@@ -46,10 +46,11 @@ import java.util.Locale
  */
 class HabitWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val result = runCatching { IndiceApp.instance.repository.habitsToday() }
+        val signedIn = IndiceApp.instance.sessionStore.current() != null
+        val result = if (signedIn) runCatching { IndiceApp.instance.repository.habitsToday() } else null
         provideContent {
             GlanceTheme {
-                HabitWidgetContent(result.getOrNull()?.date ?: Fmt.today(), result.getOrNull()?.habits ?: emptyList(), result.isFailure)
+                if (result == null) SignedOutContent() else HabitWidgetContent(result.getOrNull()?.date ?: Fmt.today(), result.getOrNull()?.habits ?: emptyList(), result.isFailure)
             }
         }
     }
@@ -59,6 +60,15 @@ private val Ink = ColorProvider(Color(0xFF1C1C1A))
 private val Muted = ColorProvider(Color(0xFF6B6B66))
 private val Paper = ColorProvider(Color(0xFFFAFAF7))
 private val Green = ColorProvider(Color(0xFF00C28A))
+
+@Composable
+private fun SignedOutContent() {
+    Column(GlanceModifier.fillMaxWidth().background(Paper).cornerRadius(20.dp).padding(horizontal = 16.dp, vertical = 12.dp).clickable(actionStartActivity<MainActivity>())) {
+        Text("Índice · hábitos", style = TextStyle(color = Ink, fontWeight = FontWeight.Bold, fontSize = 14.sp))
+        Spacer(GlanceModifier.padding(2.dp))
+        Text("Entre no app", style = TextStyle(color = Muted, fontSize = 12.sp))
+    }
+}
 
 @Composable
 private fun HabitWidgetContent(date: String, habits: List<HabitTodayDto>, offline: Boolean) {

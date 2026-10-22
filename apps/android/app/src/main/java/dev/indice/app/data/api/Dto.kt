@@ -369,3 +369,38 @@ data class IdResponse(val id: String)
 
 @Serializable
 data class ErrorResponse(val error: String)
+
+// ── Auth ───────────────────────────────────────────────────────────────────
+@Serializable
+data class SignUpInput(val name: String, val email: String, val password: String)
+
+@Serializable
+data class SignInInput(val email: String, val password: String)
+
+@Serializable
+data class VerifyEmailInput(val email: String, val otp: String)
+
+/** resend-verification e forgot-password. */
+@Serializable
+data class EmailInput(val email: String)
+
+@Serializable
+data class ResetPasswordInput(val token: String, val newPassword: String)
+
+/** refresh e sign-out. */
+@Serializable
+data class RefreshInput(val refreshToken: String)
+
+@Serializable
+data class AccessTokenDto(val accessToken: String, val accessTokenExpiresAt: String)
+
+@Serializable
+data class MeDto(val id: String, val email: String, val displayName: String)
+
+@Serializable
+data class AuthSessionDto(
+    val accessToken: String,
+    val accessTokenExpiresAt: String,
+    val refreshToken: String,
+    val user: MeDto,
+)

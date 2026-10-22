@@ -1,6 +1,8 @@
 package dev.indice.app.ui.today
 
+import androidx.lifecycle.viewModelScope
 import dev.indice.app.data.api.DailySummaryDto
+import kotlinx.coroutines.launch
 import dev.indice.app.data.api.UpsertDailyLogRequest
 import dev.indice.app.ui.common.LoadViewModel
 
@@ -8,6 +10,8 @@ class TodayViewModel : LoadViewModel<DailySummaryDto>() {
     init { refresh() }
 
     override suspend fun load(): DailySummaryDto = repo.dailySummary()
+
+    fun signOut() { viewModelScope.launch { repo.signOut() } }
 
     private fun date(): String? = (state.value as? dev.indice.app.ui.common.UiState.Ready)?.data?.date
 
