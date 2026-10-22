@@ -31,7 +31,7 @@ Ondas: 1 = WP01 + WP02 · 2 = WP03 + WP05 + WP06 (WP04 logo após a WP03 do Rex)
   - 2026-10-22 · Rex · ressalva da Ahsoka: `trustProxy: true` virou 1 salto confiável (`hop < 1`, equivalente a `trust: 1` do proxy-addr). A API é exposta direto em `*.run.app` (`cloudbuild.yaml` sem balanceador), então o Cloud Run é o único proxy e o `req.ip` passa a ser a última entrada do `X-Forwarded-For`, não a forjada à esquerda. Teste novo em `routes/auth.test.ts` ("X-Forwarded-For forjado não burla o limite por IP"): 11 requisições com IP real fixo à direita → 429 na 11ª; com `trustProxy: true` o mesmo teste falha (conferido antes do ajuste). Gates re-rodados: typecheck 7/7, test 147/147, build 5/5. Se um balanceador externo entrar na frente, revisar o número de saltos.
 
 ### WP06 — Infra
-- Lane: planejado
+- Lane: revisão
 - Dono: Obi
 - Possui: `infra/cloudrun/{cloudbuild.yaml,bootstrap.sh,qa-reset.sh,README.md}`, `.github/workflows/deploy.yml`
 - Fora de escopo: `apps/**`, `packages/**`
@@ -39,6 +39,10 @@ Ondas: 1 = WP01 + WP02 · 2 = WP03 + WP05 + WP06 (WP04 logo após a WP03 do Rex)
 - Aceite: critérios "Ambientes" da spec; scripts idempotentes; nenhum e-mail ou segredo no repositório.
 - Evidência: diff e prova do `qa-reset` quando autorizado.
 - Depende de: WP01
+- Log:
+  - 2026-10-22 · Obi · parte de arquivos pronta, só edição local (nenhum `gcloud`/`neonctl` de escrita, nenhum deploy): `cloudbuild.yaml` (`_AUTH_BASE_URL`, `_AUTH_WEB_ORIGIN` vazia = URL da web, `_ALLOWED_EMAILS_SECRET`; API recebe `NEON_AUTH_BASE_URL`, `AUTH_WEB_ORIGIN` e o secret `INDICE_ALLOWED_EMAILS`; web sem `INDICE_API_KEY_WEB`, com `--remove-secrets`; `_API_KEY_SECRET` removida); `deploy.yml` (valores de QA, origem `http://127.0.0.1:3100`); `bootstrap.sh` (secrets `indice-allowed-emails` e `indice-qa-allowed-emails` por stdin sem eco, acesso à SA de runtime, idempotente); `qa-reset.sh` (reaplica config de QA, domínio e Allow Localhost, confere Auth URL e sai com `falhou` se divergir); `README.md` (login, allowlist, APK sem chave, rotação da `indice-api-key`).
+  - Validação: `bash -n` nos scripts e YAML válido (ruby). `shellcheck` e `actionlint` não instalados. Nenhum e-mail ou segredo nos arquivos.
+  - **Pendente, depende da WP01 e de autorização do usuário:** bloco do `qa-reset.sh` marcado `TODO(spike-neon-auth.md)` (flags de `neonctl neon-auth` e se o reset muda a Auth URL ou apaga domínios); Auth URL de QA no `deploy.yml` lida do estado atual (confirmar no spike); `--remove-secrets` de secret ausente no primeiro deploy; job `indice-rekey` de Produção (README); prova real do `qa-reset`, do `bootstrap.sh` e do deploy.
 
 ### WP07 — Aceite em QA e promoção
 - Lane: planejado
