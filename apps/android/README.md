@@ -24,18 +24,15 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 ```
 
 A URL da API no emulador é `http://10.0.2.2:8080/` (host da máquina), fixa no
-build type `debug` junto com a chave `dev-local-key`.
+build type `debug`. O app não leva chave embutida: autentica por login (e-mail e
+senha), e a sessão fica em DataStore, fora do backup (`allowBackup=false`).
 
-O build de `release` aponta para o Cloud Run e exige as duas propriedades —
-sem elas o build falha em vez de gerar um APK apontando para `localhost`:
+O build de `release` aponta para o Cloud Run e exige a URL da API — sem ela o
+build falha em vez de gerar um APK apontando para `localhost`:
 
 ```bash
-./gradlew :app:assembleRelease \
-  -Pindice.apiBaseUrl=https://indice-api-XXXX.run.app/ \
-  -Pindice.apiKey=CHAVE_DO_SECRET_MANAGER
+./gradlew :app:assembleRelease -Pindice.apiBaseUrl=https://indice-api-XXXX.run.app/
 ```
 
-Para não repetir os parâmetros, guarde `indice.apiBaseUrl` e `indice.apiKey`
-em `~/.gradle/gradle.properties` (fora do repositório). A chave fica embutida
-no APK; como o app é de usuário único, o risco é perder o aparelho — se isso
-acontecer, revogue a linha em `ApiKey` (campo `revokedAt`) e gere outra.
+Para não repetir o parâmetro, guarde `indice.apiBaseUrl` em
+`~/.gradle/gradle.properties` (fora do repositório).

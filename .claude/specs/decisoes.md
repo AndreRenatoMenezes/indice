@@ -174,3 +174,84 @@ Entrada: data · autor · decisão · racional · alternativas rejeitadas · cus
 - **Pendências do usuário:** critério 9 (web de QA pelo proxy), revogar a `NEON_API_KEY` e apagar o item do Keychain, apagar as branches mergeadas, apagar a branch Neon `pre-promocao-20261022` após 7 dias estável.
 - **Custo de reverter:** `update-traffic` para `indice-api-00004-54v` e `indice-web-00003-c65`; dados pela branch Neon de segurança.
 - **Escopo afetado:** 002-infra-ambientes.
+
+## 2026-10-22 · Luke (Maestro)
+
+- **Decisão:** feature 003-login-multiusuario aberta. Descoberta delegada à Leia (Arquiteta); Chewie prepara a branch `feat/003-login-multiusuario` localmente. Nenhum executor de código começa antes da `spec.md`. Escolha do provedor (Better Auth no Fastify x Neon Auth gerenciado) é do usuário, na descoberta com a Leia. Minha recomendação, após a pesquisa dela: Better Auth no Fastify (Neon Auth beta exige Next 16, branch Neon em dev/CI, `qa-reset` copiaria usuários de Produção, Android sem suporte documentado).
+- **Racional:** escolha de provedor tem impacto de segurança e dado pessoal, então não é decisão do Maestro.
+- **Alternativas rejeitadas:** decidir o provedor por conta própria; começar implementação antes do contrato.
+- **Custo de reverter:** baixo agora (só branch local).
+- **Escopo afetado:** 003-login-multiusuario.
+
+## 2026-10-22 · Leia (Arquiteto)
+
+- **Decisão:** na 003, a API é a fachada de auth (`POST /auth/*`). Web e Android nunca falam com o Neon Auth. A API devolve o JWT do Neon (15 min) como `accessToken` e o token de sessão opaco como `refreshToken`, e as rotas de dados verificam o JWT localmente pelo JWKS, com `issuer`/`audience` obrigatórios. Não usamos o SDK `@neondatabase/auth` (beta, peer `next >=16`), e a web segue no Next 15 com cookies `httpOnly` próprios, renovados no `middleware.ts`.
+- **Racional:** o protocolo com o Neon Auth fica num lugar só e testável, o Android mantém uma base URL e um contrato, e não há upgrade de framework. O Managed não expõe o plugin `bearer`, então um cliente nativo direto exigiria tratar cookie e `Origin` em Kotlin.
+- **Alternativas rejeitadas:** SDK Neon na web com Next 16 (upgrade grande e SDK beta); clientes falando direto com o Neon Auth (protocolo duplicado em TS e Kotlin).
+- **Custo de reverter:** médio. Os clientes só conhecem `/auth/*` da API; trocar o provedor depois mexe só na API.
+- **Escopo afetado:** 003 (API, web, Android).
+
+## 2026-10-22 · Leia (Arquiteto)
+
+- **Decisão:** detalhes da 003 decididos sem pergunta: (1) ligação do usuário atual por e-mail verificado no primeiro login, sem migração de dados por SQL; (2) usuário novo nasce vazio (só `UserSettings`); (3) `sign-up` com e-mail fora da lista responde 403 (revela se o e-mail está na lista, aceito em app pessoal); (4) SMTP compartilhado do Neon; (5) web de QA continua fechada por IAM, com `AUTH_WEB_ORIGIN` de QA = origem do proxy `http://127.0.0.1:3100`; (6) usuários e hashes de senha da Produção herdados por QA no reset, coerente com a decisão 6 da 002; (7) Android com `allowBackup="false"`; (8) a allowlist fica em secret por ambiente, porque e-mail é dado pessoal e o repositório é público.
+- **Racional:** menor superfície que atende ao aceite; nenhuma delas muda regra de negócio além do que o usuário escolheu.
+- **Alternativas rejeitadas:** ligação manual por script; categorias iniciais para usuário novo; SMTP próprio já na v1; allowlist em env aberta no `cloudbuild.yaml`.
+- **Custo de reverter:** baixo para cada item.
+- **Escopo afetado:** 003.
+
+## 2026-10-22 · Luke (Maestro)
+
+- **Decisão:** contrato da 003 conferido (aceite binário, fronteiras explícitas, contratos nomeados). Partição: WP02, WP03 e WP04 com Rex (um dono para `packages/**` e `apps/api|web`), WP05 Engineer Android novo, WP01 e WP06 com Obi, WP07 com Ahsoka. `schema.md` é editado pelo Rex, aplicando o texto do delta do `plan.md` no mesmo commit da migração. Preset do Engineer Android: Claude Code, confirmado pelo usuário. Usuário autorizou habilitar o Neon Auth na branch principal e na `dev` (WP01).
+- **Racional:** a Leia deixou a escolha do dono do `schema.md` para o Maestro; Rex no commit evita dois editores na migração e custa menos que um handoff extra.
+- **Alternativas rejeitadas:** Leia editar o `schema.md` junto (dois donos no mesmo commit); dois Engineers no web/API.
+- **Custo de reverter:** baixo (só quem edita o arquivo).
+- **Escopo afetado:** 003, WP02 e WP05.
+
+## 2026-10-22 · Luke (Maestro)
+
+- **Decisão:** a Ahsoka (Gemini 3.8 Flash) bateu a cota individual (volta em ~145h). Troca de agente no lugar para Claude Code, confirmada pelo usuário; Rex passou a rodar `agy --mode accept-edits` (confirmado pelo usuário) para reduzir prompts de permissão. Cassian relatou duas decisões fora do plan: sign-in com e-mail não verificado reenvia o código e abre a tela Código; "Sair" só na aba Hoje.
+- **Racional:** manter revisão independente de quem produz (regra 5); as duas decisões do Cassian são de comportamento de produto e vão à Leia se a Ahsoka as reprovar.
+- **Custo de reverter:** baixo (troca de agente é no lugar).
+- **Escopo afetado:** WP02, WP05, revisões.
+
+## 2026-10-22 · Leia (Arquiteto)
+
+- **Decisão:** duas propostas do Cassian (WP05) foram aceitas e formalizadas no `plan.md` da 003. (1) Sign-in com 403 `email not verified` reenvia o código automaticamente (`/auth/resend-verification`) e abre a tela Código, no Android e na web. (2) No Android, o "Sair" fica só na aba Hoje, e a tela "acesso removido" tem o seu próprio "Sair".
+- **Racional:** (1) poupa um toque, e o reenvio já é idempotente (204 sempre); (2) sem a ressalva, um usuário tirado da lista ficaria sem saída.
+- **Custo de reverter:** baixo.
+- **Escopo afetado:** 003 (WP04 e WP05).
+
+## 2026-10-22 · Luke (Maestro)
+
+- **Decisão:** WP03 (código e lógica pura) aprovada pela Ahsoka; parte de protocolo do Neon Auth fica pendente do spike da WP01 (4 pontos listados no relatório dela). WP03 só fecha "pronta" com a prova ponta a ponta. WP04 (web) começa em paralelo contra o contrato fixo. Ressalva de segurança da Ahsoka: `trustProxy: true` faz o limite de 10/min por IP em `/auth/*` ser contornável forjando `X-Forwarded-For`; Rex corrige para o número de saltos do Cloud Run, com evidência, ou registra o risco aceito.
+- **Racional:** ressalva de baixo custo, no arquivo da WP03 do Rex; sem mudança de contrato.
+- **Custo de reverter:** baixo.
+- **Escopo afetado:** WP03.
+
+## 2026-10-22 · Leia (Arquiteto)
+
+- **Decisão:** na web da 003, o cookie `indice_rt` passa a ter `maxAge` de 7 dias e é regravado com mais 7 dias a cada refresh bem-sucedido (janela deslizante). Fechar o navegador não desloga.
+- **Racional:** mesmo comportamento do Android. Os 7 dias seguem a validade padrão da sessão do Better Auth, e quem manda é a sessão do Neon: vencida ou revogada, o refresh dá 401 e leva a `/entrar`. O "Sair" revoga a sessão no servidor.
+- **Alternativas rejeitadas:** cookie de sessão (desloga a cada vez que fecha o navegador, o que incomoda num app pessoal de uso diário); 30 dias (passaria da sessão do Neon e só guardaria um token morto).
+- **Custo de reverter:** baixo (um atributo do cookie).
+- **Escopo afetado:** 003, WP04.
+
+## 2026-10-23 · Leia (Arquiteto)
+
+- **Decisão:** opção (a) para o achado do spike da 003. A branch Neon `dev` passa a ser filha da principal (`production`), não da `qa`, e serve só ao Neon Auth do dev local. A `dev` atual é recriada. A senha do `neondb_owner` da `dev` é trocada na criação e nunca gravada, e a connection string dela não é usada. O `qa-reset.sh` exige, como pré-condição, que a `qa` não tenha filha, e não usa `--preserve-under-name`. Depois do reset, roda `qa-db-password.sh`, reaplica a config de auth de QA e confere a Auth URL. A premissa "JWKS copiadas no reset" foi corrigida no plano.
+- **Racional:** com `--preserve-under-name`, a `dev` vira filha da branch preservada, que então não pode ser apagada: uma branch acumulada por reset, na cota do Free. Com a `dev` fora da árvore da `qa`, o reset volta a ser o de hoje.
+- **Alternativas rejeitadas:** (b) `--preserve-under-name` com nome por data (acumula branches, porque a preservada fica com a `dev` como filha); (c) `dev` como branch raiz independente (sem o Auth herdado e com a config feita do zero, sem ganho sobre (a)).
+- **Custo de reverter:** baixo (recriar a `dev`).
+- **Escopo afetado:** 003, WP06 (`qa-reset.sh`, README) e branch `dev` do Neon.
+
+## 2026-10-23 · Luke (Maestro)
+
+- **Decisão:** usuário autorizou (a) push de `feat/003-login-multiusuario` e PR para `development` (merge segue sendo dele); (b) aceitar o remetente "Neon Auth" do SMTP compartilhado na 003 (o shared ignora `--sender-name`), com SMTP próprio indo ao INBOX; (c) apagar a `dev` antiga e a `qa-pre-reset-20261023` e recriar a `dev` filha da principal; (d) rodar `qa-db-password.sh` na qa; (e) reset da qa para o teste de Auth URL (feito). Obi executou (c), (d) e (e) com evidência; Allow Localhost de production agora `false`.
+- **Racional:** pedido explícito do usuário; sem escopo novo.
+- **Custo de reverter:** baixo para (b); (c) apagou só dados de teste.
+- **Escopo afetado:** WP01, WP06, WP07.
+
+## 2026-10-23 · Luke (Maestro), registrado pela Leia
+
+- **Decisão (do usuário):** na 003, o remetente "Neon Auth" do SMTP compartilhado foi aceito, porque o shared ignora `sender-name`. Ninguém roda `email-provider update --sender-name`. O SMTP próprio com remetente "Índice" foi para o INBOX como melhoria.
+- **Escopo afetado:** 003 (`plan.md`: SMTP, Config do Neon Auth, passo 4 do `qa-reset.sh`), INBOX.

@@ -61,5 +61,8 @@ export const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export const monthName = (s: ISODate) => fmt(s, { month: "long" });
 export const weekdayName = (s: ISODate) => fmt(s, { weekday: "long" });
+
+/** "2026-10-22" → "22/10/2026"; `null` vira travessão. */
+export const dateBR = (iso: string | null) => (iso ? iso.split("-").reverse().join("/") : "—");
 /** "segunda", "terça" — o rótulo curto das colunas do spread. */
 export const weekdayShort = (s: ISODate) => weekdayName(s).replace("-feira", "");

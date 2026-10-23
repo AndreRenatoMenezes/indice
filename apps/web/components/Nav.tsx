@@ -3,11 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { signOutAction } from "@/lib/actions";
+import { Btn } from "./ui";
 import { SketchLine } from "./sketch";
 
 const items = [
   ["/", "Hoje"], ["/semana", "Semana"], ["/financeiro", "Financeiro"], ["/habitos", "Hábitos"], ["/metas", "Metas"], ["/midia", "Mídia"],
 ] as const;
+
+// Telas de auth ficam sem a navegação do caderno: não há sessão para navegar.
+const AUTH_PATHS = ["/entrar", "/criar-conta", "/verificar-email", "/esqueci-senha", "/redefinir-senha"];
 
 /** Data de hoje só depois da montagem: evita divergir do relógio do servidor. */
 function TodayLabel() {
@@ -17,11 +22,13 @@ function TodayLabel() {
     const weekday = now.toLocaleDateString("pt-BR", { weekday: "long" });
     setLabel(`${weekday} · ${now.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).replace(/\./g, "")}`);
   }, []);
-  return <span className="ml-auto text-sm muted">{label}</span>;
+  return <span className="text-sm muted">{label}</span>;
 }
 
 export function Nav() {
   const pathname = usePathname();
+  if (AUTH_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return null;
+
   return (
     <header className="mx-auto flex max-w-[1080px] flex-col justify-end px-12">
       <div className="flex h-[58px] items-center gap-9">
@@ -37,7 +44,12 @@ export function Nav() {
             );
           })}
         </nav>
-        <TodayLabel />
+        <div className="ml-auto flex items-center gap-4">
+          <TodayLabel />
+          <form action={signOutAction}>
+            <Btn type="submit" tone="ghost" className="text-sm">sair</Btn>
+          </form>
+        </div>
       </div>
       <SketchLine strokeWidth={1.1} />
     </header>

@@ -1,4 +1,5 @@
 import { getDailySummary, brl, dateBR } from "@/lib/api";
+import { unstable_rethrow } from "next/navigation";
 import { capitalize, isoWeek, monthName, weekdayName, year } from "@/lib/dates";
 import { addEntry, deleteEntry, logHabit, migrateEntry, toggleEntry, upsertDailyLog } from "@/lib/actions";
 import { Btn, Card, Empty, Field, Frame, Pill, Progress, SketchLine, Stat, WeekDots } from "@/components/ui";
@@ -12,6 +13,7 @@ export default async function Today({ searchParams }: { searchParams: Promise<{ 
   try {
     s = await getDailySummary(date);
   } catch (e) {
+    unstable_rethrow(e);
     return <Card title="API indisponível"><Empty>{String((e as Error).message)}</Empty></Card>;
   }
   const f = s.finance;

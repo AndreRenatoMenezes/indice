@@ -5,7 +5,7 @@
 // na semana acompanha na hora (estado otimista do WeekBoard).
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { CustomListDto, EntryDto, UpdateEntryInput } from "@indice/shared";
-import { dateBR } from "@/lib/api";
+import { dateBR } from "@/lib/dates";
 import { capitalize, weekdayName, weekdayShort, dayOfMonth } from "@/lib/dates";
 import { PALETTE } from "../palette";
 import { glyph } from "./EntryRow";

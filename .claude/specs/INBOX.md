@@ -10,6 +10,10 @@ virar feature, o Spec Architect abre uma spec.
 - APK de QA instalável ao lado do de Produção (candidata a 003, só Android): `applicationIdSuffix ".qa"` e nome "Índice QA" por propriedade Gradle. Hoje o de QA substitui o de Produção (mesmo `dev.indice.app`). Fazer quando trocar de APK incomodar (decisão de 2026-10-20, 002).
 - "Esta e as próximas" numa ocorrência futura também apaga as ocorrências abertas entre hoje e ela (é "parar" da spec 001); talvez parar só a partir da data escolhida (`DELETE /recurrence-rules/:id?from=`).
 
+- Excluir a própria conta pelo app (LGPD) e trocar e-mail: ficaram fora da 003.
+- SMTP próprio no Neon Auth: os e-mails de código e de reset saem com remetente "Índice" (o compartilhado `auth@mail.myneon.app` ignora `sender-name` e mostra "Neon Auth"), com mais entrega e limite. Aceito como está na 003, por decisão do usuário (2026-10-23).
+- Categorias, hábitos e metas iniciais para usuário novo (na 003 ele nasce vazio).
+
 ## Bugs
 - Web (`indice-web`) é pública e sem login: a chave fica no servidor, então qualquer um com a URL vê e altera os dados. Com QA (002) vira duas URLs.
 - No celular a página inteira estoura a largura (~680 px num aparelho de 412): o `Nav` (6 links em linha + data) e o `px-12` do layout não encolhem — vale para todas as páginas, não só a Semana.

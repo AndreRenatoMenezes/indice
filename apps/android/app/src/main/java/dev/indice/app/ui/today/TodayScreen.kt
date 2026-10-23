@@ -79,7 +79,7 @@ fun TodayScreen(vm: TodayViewModel = viewModel()) {
 private fun TodayContent(s: DailySummaryDto, vm: TodayViewModel) {
     val f = s.finance
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { ScreenHeader(Fmt.header(s.date), "Hoje", pill = { Pill(f.trafficLight.label, Tones.of(f.trafficLight.status)) }, onRefresh = vm::refresh) }
+        item { ScreenHeader(Fmt.header(s.date), "Hoje", pill = { Pill(f.trafficLight.label, Tones.of(f.trafficLight.status)) }, onRefresh = vm::refresh, onSignOut = vm::signOut) }
 
         item {
             SectionCard("Bullets") {

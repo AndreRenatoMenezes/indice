@@ -1,11 +1,26 @@
 "use server";
 // Server Actions: o browser nunca fala com a API diretamente.
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import type {
   CreateEntryInput, CreateListInput, CustomListDto, EntryBatchInput, EntryDto, MoveEntryInput, RecurrenceInput,
   RecurrenceRuleDto, UpdateEntryInput, UpdateListInput,
 } from "@indice/shared";
 import { api } from "./api";
+import { safeNext } from "./safe-next";
+import {
+  AuthError,
+  clearSession,
+  getRefreshToken,
+  requestForgotPassword,
+  requestResendVerification,
+  requestResetPassword,
+  requestSignIn,
+  requestSignOut,
+  requestSignUp,
+  requestVerifyEmail,
+  saveSession,
+} from "./session";
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 const opt = (fd: FormData, k: string) => str(fd, k) || undefined;
@@ -210,4 +225,146 @@ export async function updateMedia(id: string, patch: { status?: string; rating?:
 
 export async function setMediaProgress(id: string, formData: FormData) {
   await updateMedia(id, { progress: numOpt(formData, "progress"), rating: numOpt(formData, "rating") });
+}
+
+// ── Auth ────────────────────────────────────────────────────────────────────
+// Formulários sem JS de cliente: cada action termina em `redirect` com um
+// código de erro/ok na URL, e a página traduz para a mensagem em PT.
+const emailParam = (email: string) => encodeURIComponent(email);
+
+function authErrorCode(error: unknown): string {
+  if (error instanceof AuthError) {
+    if (error.status === 401) return "credenciais";
+    if (error.status === 403) return "nao-autorizado";
+    if (error.status === 400 || error.status === 422) return "campos";
+  }
+  return "indisponivel";
+}
+
+export async function signInAction(formData: FormData) {
+  const email = str(formData, "email");
+  const password = String(formData.get("password") ?? "");
+  const next = safeNext(str(formData, "next"));
+
+  if (!email || !password) redirect(`/entrar?erro=campos&email=${emailParam(email)}`);
+
+  try {
+    const session = await requestSignIn({ email, password });
+    await saveSession(session);
+  } catch (error) {
+    // Emenda da 003: conta não verificada reenvia o código e abre a tela dele.
+    if (error instanceof AuthError && error.status === 403 && error.code === "email not verified") {
+      await requestResendVerification(email).catch(() => undefined);
+      redirect(`/verificar-email?email=${emailParam(email)}`);
+    }
+    if (error instanceof AuthError && error.status === 403) {
+      redirect(`/entrar?erro=nao-autorizado&email=${emailParam(email)}`);
+    }
+    redirect(`/entrar?erro=${authErrorCode(error)}&email=${emailParam(email)}`);
+  }
+
+  redirect(next);
+}
+
+export async function signUpAction(formData: FormData) {
+  const name = str(formData, "name");
+  const email = str(formData, "email");
+  const password = String(formData.get("password") ?? "");
+  const confirm = String(formData.get("confirm") ?? "");
+  const back = (erro: string) =>
+    `/criar-conta?erro=${erro}&email=${emailParam(email)}&nome=${encodeURIComponent(name)}`;
+
+  if (!name || !email) redirect(back("campos"));
+  if (password.length < 8) redirect(back("curta"));
+  if (password !== confirm) redirect(back("senhas"));
+
+  try {
+    await requestSignUp({ name, email, password });
+  } catch (error) {
+    if (error instanceof AuthError && error.status === 403) redirect(back("nao-autorizado"));
+    if (error instanceof AuthError && error.status === 409) redirect(back("ja-cadastrado"));
+    if (error instanceof AuthError && (error.status === 400 || error.status === 422)) redirect(back("invalido"));
+    redirect(back("indisponivel"));
+  }
+
+  redirect(`/verificar-email?email=${emailParam(email)}`);
+}
+
+export async function verifyEmailAction(formData: FormData) {
+  const email = str(formData, "email");
+  const otp = str(formData, "otp").replace(/\s/g, "");
+  const back = (query: string) => `/verificar-email?email=${emailParam(email)}${query}`;
+
+  if (!email) redirect("/entrar?erro=campos");
+  if (!/^\d{6}$/.test(otp)) redirect(back("&erro=codigo"));
+
+  try {
+    await requestVerifyEmail({ email, otp });
+  } catch (error) {
+    if (error instanceof AuthError && error.status === 400) redirect(back("&erro=codigo"));
+    redirect(back("&erro=indisponivel"));
+  }
+
+  // A API de verificação não devolve sessão: a entrada segue com a senha.
+  redirect(`/entrar?email=${emailParam(email)}&ok=verificado`);
+}
+
+export async function resendVerificationAction(formData: FormData) {
+  const email = str(formData, "email");
+  if (!email) redirect("/entrar?erro=campos");
+
+  try {
+    await requestResendVerification(email);
+  } catch {
+    redirect(`/verificar-email?email=${emailParam(email)}&erro=indisponivel`);
+  }
+
+  redirect(`/verificar-email?email=${emailParam(email)}&ok=reenviado`);
+}
+
+export async function forgotPasswordAction(formData: FormData) {
+  const email = str(formData, "email");
+  if (!email) redirect("/esqueci-senha?erro=campos");
+
+  try {
+    await requestForgotPassword(email);
+  } catch {
+    redirect("/esqueci-senha?erro=indisponivel");
+  }
+
+  // 204 sempre: não revela se o e-mail tem conta.
+  redirect("/esqueci-senha?ok=enviado");
+}
+
+export async function resetPasswordAction(formData: FormData) {
+  const token = str(formData, "token");
+  const newPassword = String(formData.get("password") ?? "");
+  const confirm = String(formData.get("confirm") ?? "");
+  const back = (erro: string) => `/redefinir-senha?token=${encodeURIComponent(token)}&erro=${erro}`;
+
+  if (!token) redirect("/redefinir-senha?erro=token");
+  if (newPassword.length < 8) redirect(back("curta"));
+  if (newPassword !== confirm) redirect(back("senhas"));
+
+  try {
+    await requestResetPassword({ token, newPassword });
+  } catch (error) {
+    if (error instanceof AuthError && error.status === 400) redirect(back("token"));
+    redirect(back("indisponivel"));
+  }
+
+  redirect("/entrar?ok=senha-redefinida");
+}
+
+export async function signOutAction() {
+  const refreshToken = await getRefreshToken();
+  if (refreshToken) {
+    try {
+      await requestSignOut(refreshToken);
+    } catch {
+      // Idempotente do lado da API: mesmo com o provedor fora, os cookies saem.
+    }
+  }
+  await clearSession();
+  redirect("/entrar");
 }

@@ -1,5 +1,5 @@
 ---
-atualizado_em: 2026-09-25
+atualizado_em: 2026-10-22
 ---
 
 # Banco de dados
@@ -117,8 +117,14 @@ erDiagram
 - **Um registro de diário (humor, energia, reflexão) por dia** por usuário.
 - **Excluir o usuário apaga tudo dele** (`ON DELETE CASCADE` a partir de `User`).
 
+## Core — User / Auth
+
+- **`USER.authUserId`**: texto, único, nulo até o primeiro login.
+- **Regra:** um `User` liga a no máximo uma conta do Neon Auth; ligação por e-mail verificado só quando `authUserId` é nulo.
+
 ## Histórico de migrações
 
 | Data | Feature | Mudança | Tipo |
 |---|---|---|---|
 | 2026-09-18 | (pré-SDD) | `20260918200928_init`: schema inicial completo | aditiva |
+| 2026-10-22 | 003-login-multiusuario | `20261022203000_user_auth_user_id`: `USER.authUserId` (texto, único, nulo até o primeiro login) | aditiva |
