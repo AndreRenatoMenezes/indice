@@ -92,3 +92,10 @@ Entrada: data · agente · bloqueio em uma linha · escopo afetado · o que segu
 - **Escopo afetado:** WP01 (cadastro, verificação, login, `/token`, sign-out, reset), `reset --parent` (também depende de autorização para resetar `qa`), `qa-reset.sh` (flags finais).
 - **Dono da decisão:** usuário.
 - **Pendente:** (a) rodar `neonctl neon-auth domain allow-localhost disable --project-id winter-rice-45624313 --branch production` e `neonctl neon-auth config email-provider update --project-id winter-rice-45624313 --branch <production|qa|dev> --type shared --sender-name "Índice"` (nome do remetente); (b) indicar o e-mail de teste e digitar OTP/link quando eu pedir.
+
+## 2026-10-23 · Obi · 003 WP01 (nome "Índice" no remetente)
+- **Bloqueio:** a config "nome Índice" do plano não é aplicável no provider compartilhado. `neonctl neon-auth config email-provider update --type shared --sender-name "Índice"` roda em `production` e avisa que `--sender-email` e `--sender-name` são ignorados para o provider `shared`; leitura confirma "Neon Auth" / `auth@mail.myneon.app` em `production`, `qa` e `dev`. Só `--type standard` (SMTP próprio) aceita nome.
+- **Escopo afetado:** spec/plan (nome da aplicação no e-mail). Sem efeito funcional no fluxo (OTP e reset chegam como "Neon Auth").
+- **Segue andando:** tudo; removi o `sender-name` do `qa-reset.sh` e ajustei README e spike.
+- **Dono da decisão:** Leia (aceitar "Neon Auth" como remetente ou abrir SMTP próprio, hoje fora de escopo).
+- **Resolução:** pendente.

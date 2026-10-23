@@ -98,7 +98,6 @@ neonctl neon-auth domain list
 neonctl neon-auth domain add <origem>
 neonctl neon-auth domain allow-localhost get | enable | disable
 neonctl neon-auth status          # linha "  Base URL:       <url>"
-neonctl neon-auth config email-provider update --type shared --sender-name "Índice"
 neonctl branches reset qa --parent --project-id <id>     # a qa sem filha; com filha o Neon recusa
 ```
 
@@ -111,7 +110,6 @@ Não foi exercitado nesta sessão: `domain add` e `domain list` com domínios (a
 ## Riscos e pendências para a WP03/WP06
 
 - O nome do cookie e a forma `<token>.<assinatura>` mudam o `neon-auth-client.ts` do Rex (`NEON_AUTH_PROTOCOL_CONFIRMED` pode virar `true`). O Rex não deve decodificar nem reconstruir o valor.
-- O remetente continua "Neon Auth" até o usuário rodar `email-provider update --sender-name "Índice"` nas três branches.
 - Allow Localhost de `production` ainda `true`.
 - A `dev` ocupa a cota do plano Free; a branch preservada foi apagada.
-- O nome do remetente continua "Neon Auth" nas três branches até o usuário rodar `email-provider update`; o `qa-reset.sh` já aplica na `qa`.
+- **O nome "Índice" do remetente não é aplicável no SMTP compartilhado**: `email-provider update --type shared --sender-name "Índice"` roda, mas imprime `--sender-email and --sender-name are ignored for the shared email provider` e o nome segue "Neon Auth" (`auth@mail.myneon.app`) em `production`, `qa` e `dev`. Só `--type standard` (SMTP próprio, fora de escopo) aceita nome. Os e-mails de OTP e reset chegam como "Neon Auth".
