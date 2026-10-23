@@ -84,3 +84,11 @@ Entrada: data · agente · bloqueio em uma linha · escopo afetado · o que segu
 - **Segue andando:** WP02.
 - **Dono da decisão:** usuário (regra de permissão Bash para `neonctl neon-auth *` e `neonctl branches create`, ou rodar o comando no terminal com `! `).
 - **Resolução:** pendente.
+
+## 2026-10-23 · Obi · 003 WP01 (retomada: escrita pontual negada e e-mail de teste)
+- **Feito:** o usuário rodou `email-password update` em `production` e `qa` (confirmado por leitura: otp, `Require Verification: true`, `Send Email On Sign Up: true`, `Auto Sign In After Verify: false`). Criei a branch `dev` (filha da `qa`, `--no-secrets`): Auth já veio habilitado, config igual, Allow Localhost `true`, Auth URL própria (`ep-billowing-firefly-aczr0un6`).
+- **Bloqueio 1 (classificador):** negou `neonctl neon-auth domain allow-localhost disable --project-id winter-rice-45624313 --branch production`. Em `production` o Allow Localhost está `true` e o plano pede `false`. Também negou, na primeira tentativa, `email-provider update --help` e `branches create --help` agrupados (só leitura; `--help` isolado passou).
+- **Bloqueio 2 (insumo humano):** o Gate precisa de um e-mail de teste que o usuário controle e permita o envio do OTP/link pelo Neon, e de alguém que leia o código e o link de reset na caixa de entrada e os digite no meu terminal. Não vou usar o e-mail pessoal do usuário sem ele indicar, nem ler a caixa dele.
+- **Escopo afetado:** WP01 (cadastro, verificação, login, `/token`, sign-out, reset), `reset --parent` (também depende de autorização para resetar `qa`), `qa-reset.sh` (flags finais).
+- **Dono da decisão:** usuário.
+- **Pendente:** (a) rodar `neonctl neon-auth domain allow-localhost disable --project-id winter-rice-45624313 --branch production` e `neonctl neon-auth config email-provider update --project-id winter-rice-45624313 --branch <production|qa|dev> --type shared --sender-name "Índice"` (nome do remetente); (b) indicar o e-mail de teste e digitar OTP/link quando eu pedir.

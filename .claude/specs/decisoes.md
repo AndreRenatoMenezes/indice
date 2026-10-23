@@ -235,3 +235,11 @@ Entrada: data · autor · decisão · racional · alternativas rejeitadas · cus
 - **Alternativas rejeitadas:** cookie de sessão (desloga a cada vez que fecha o navegador, o que incomoda num app pessoal de uso diário); 30 dias (passaria da sessão do Neon e só guardaria um token morto).
 - **Custo de reverter:** baixo (um atributo do cookie).
 - **Escopo afetado:** 003, WP04.
+
+## 2026-10-23 · Leia (Arquiteto)
+
+- **Decisão:** opção (a) para o achado do spike da 003. A branch Neon `dev` passa a ser filha da principal (`production`), não da `qa`, e serve só ao Neon Auth do dev local. A `dev` atual é recriada. A senha do `neondb_owner` da `dev` é trocada na criação e nunca gravada, e a connection string dela não é usada. O `qa-reset.sh` exige, como pré-condição, que a `qa` não tenha filha, e não usa `--preserve-under-name`. Depois do reset, roda `qa-db-password.sh`, reaplica a config de auth de QA e confere a Auth URL. A premissa "JWKS copiadas no reset" foi corrigida no plano.
+- **Racional:** com `--preserve-under-name`, a `dev` vira filha da branch preservada, que então não pode ser apagada: uma branch acumulada por reset, na cota do Free. Com a `dev` fora da árvore da `qa`, o reset volta a ser o de hoje.
+- **Alternativas rejeitadas:** (b) `--preserve-under-name` com nome por data (acumula branches, porque a preservada fica com a `dev` como filha); (c) `dev` como branch raiz independente (sem o Auth herdado e com a config feita do zero, sem ganho sobre (a)).
+- **Custo de reverter:** baixo (recriar a `dev`).
+- **Escopo afetado:** 003, WP06 (`qa-reset.sh`, README) e branch `dev` do Neon.

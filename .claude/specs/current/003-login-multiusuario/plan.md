@@ -15,7 +15,7 @@ criado_em: 2026-10-22
   - Sessão por token opaco no cookie `__Secure-neonauth.session_token`. JWT via `GET /token` ou pelo header `set-auth-jwt` do `get-session`.
   - **O cadastro é aberto a qualquer pessoa.** O "restricted signups" está no roadmap.
   - O plugin `bearer` não é exposto. Reset de senha só por link, que funciona no SMTP compartilhado. Verificação de e-mail por código também funciona no SMTP compartilhado.
-  - Um branch ou reset copia `neon_auth` inteiro: usuários, hashes, config, domínios confiáveis e chaves JWKS. A doc diz que "tokens de um branch não valem em outro" porque o emissor muda.
+  - Um branch ou reset copia `neon_auth` inteiro: usuários, hashes e config. A doc diz que "tokens de um branch não valem em outro" porque o emissor muda. **Emenda 2026-10-23 (spike):** as chaves JWKS **não** são copiadas. `qa` e `production` já tinham chaves diferentes, e a da `qa` mudou no reset. O `reset --parent` falha enquanto a branch tem filha, e devolve à `qa` as senhas de banco da principal.
   - Free: até 60 mil MAU.
 - `@neondatabase/auth` 0.7.0-beta tem peer `next >=16`. A web está no Next 15.5.
 - A API hoje: `plugins/auth.ts` resolve `req.userId` por `X-Api-Key` ou `Authorization: Bearer <chave>`. A chave `dev-local-key` vale só fora de produção. O rate limit agrupa por chave.
@@ -43,7 +43,7 @@ O que a fachada **não** protege: o endpoint público do Neon Auth aceita cadast
 
 | Tema | Decisão |
 |---|---|
-| Verificação do JWT | `jose` (`createRemoteJWKSet` + `jwtVerify`), `algorithms: ["EdDSA"]`, `issuer` e `audience` = origem de `NEON_AUTH_BASE_URL`, e `exp`, `sub` e `email` obrigatórios. Emissor errado responde 401: é isso que separa QA de Produção, porque as chaves JWKS são copiadas no reset. |
+| Verificação do JWT | `jose` (`createRemoteJWKSet` + `jwtVerify`), `algorithms: ["EdDSA"]`, `issuer` e `audience` = origem de `NEON_AUTH_BASE_URL`, e `exp`, `sub` e `email` obrigatórios. Emissor errado responde 401: é a separação principal entre QA e Produção. As chaves JWKS também diferem (spike), mas o contrato não depende disso. |
 | Classificação da credencial | `X-Api-Key` vai para ApiKey. `Authorization: Bearer` com três segmentos base64url vai para JWT, e o resto para ApiKey, mantendo a compatibilidade de scripts. Função pura. |
 | Identidade | Busca `User` por `authUserId = sub`. Se não achar e `emailVerified` for verdadeiro com o e-mail na allowlist: liga ao `User` de mesmo e-mail (comparação sem caixa) que tenha `authUserId` nulo; senão cria `User` + `UserSettings` vazios. A ligação é atômica (update condicionado a `authUserId IS NULL`), e a corrida perdida relê. |
 | Allowlist | `INDICE_ALLOWED_EMAILS`, e-mails separados por vírgula, normalizados com trim e minúsculas, conferida **em toda requisição JWT** pelo e-mail do `User` resolvido. Fora da lista ou não verificado: 403 `{ error: "not allowed" }` ou `{ error: "email not verified" }`. Não vale para ApiKey. |
@@ -153,8 +153,16 @@ model User {
 
 - O `cloudbuild.yaml` ganha substituições `_AUTH_BASE_URL`, `_AUTH_WEB_ORIGIN` e `_ALLOWED_EMAILS_SECRET` (com padrões de Produção) e passa `NEON_AUTH_BASE_URL`, `AUTH_WEB_ORIGIN` e o secret para a API. O `deploy.yml` passa os valores de QA. `_API_KEY_SECRET` deixa de ir para a web.
 - `bootstrap.sh` cria os secrets da allowlist (valor lido do terminal sem eco, como os outros) e dá acesso à SA de runtime.
-- `qa-reset.sh`: depois do reset, reaplica a config de QA do Neon Auth pela API do Neon e confere que a Auth URL de QA é a mesma do env de `indice-api-qa`. Se divergir, imprime `falhou` e não segue.
-- Dev local: uma branch Neon `dev` (filha da `qa`) com Auth habilitado e Allow Localhost. O `NEON_AUTH_BASE_URL` dela vai no `.env` da raiz (não é segredo, mas fica fora do repo). Sem ela, a web local só funciona pela `dev-local-key`, que é o comportamento de hoje.
+- `qa-reset.sh` (emenda 2026-10-23), nesta ordem:
+  1. Pré-condição: a `qa` não tem branch filha. Se tiver, imprime `falhou: qa tem filha <nome>` e para antes do reset. Não usa `--preserve-under-name`.
+  2. `branches reset qa --parent`, como hoje.
+  3. `qa-db-password.sh` (já é chamado hoje): o reset devolve a senha da principal.
+  4. Reaplica a config de auth da `qa` com as flags do spike: `config email-password update`, `domain allow-localhost enable`, `domain add http://127.0.0.1:3100` se não estiver no `domain list`, e `email-provider update --type shared --sender-name "Índice"`.
+  5. Confere que o `Base URL` de `neon-auth status` na `qa` é igual ao `NEON_AUTH_BASE_URL` de `indice-api-qa`. Se divergir, `falhou` e para.
+  6. Migrate, seed e rekey, como hoje.
+
+  Efeito esperado e aceito: sessões e JWTs de QA anteriores ao reset deixam de valer, e é preciso entrar de novo em QA.
+- Dev local (emenda 2026-10-23): a branch Neon `dev` é **filha da principal**, não da `qa`. A `dev` atual (só dados de teste) é apagada e recriada com `--parent production --no-secrets`. Ela serve **só ao Auth**: os dados do app local continuam no Postgres do compose, e a connection string da `dev` nunca é puxada nem gravada (`.env` recebe só o `NEON_AUTH_BASE_URL`). Logo depois de criar, o Obi troca a senha do `neondb_owner` na `dev` sem gravar o valor, porque a filha herda a senha da Produção. Config de auth da `dev`: igual à da `qa`, com Allow Localhost ligado. A `dev` herda os usuários da Produção (inclusive o meu e-mail), coerente com a decisão 6 da 002. A conta de teste do spike, se não estiver na Produção, é recriada na `dev`.
 - README: login, allowlist (como adicionar ou remover uma pessoa), APK sem chave, e o passo de rotação da `indice-api-key` de Produção depois que o APK novo estiver instalado (o APK antigo leva a chave embutida).
 
 ## Pacotes de trabalho e fronteiras de arquivo sugeridas
@@ -191,11 +199,13 @@ model User {
 |---|---|
 | Protocolo do Neon Auth servidor a servidor não documentado (Origin, cookie, `/token`) | Gate do spike na WP01, antes de qualquer código. Plano B registrado. |
 | Cadastro aberto no endpoint do Neon | A autorização fica na API, em toda requisição. Critério com conta criada por fora. |
-| Chaves JWKS iguais em QA e Produção depois do reset | `issuer`/`audience` obrigatórios. Critério cruzado QA ↔ Produção. |
+| Token de um ambiente aceito em outro | `issuer`/`audience` obrigatórios (as chaves JWKS também diferem, conforme o spike). Critério cruzado QA ↔ Produção. |
+| `dev` filha da principal herda a senha de banco da Produção | Senha da `dev` trocada na criação e nunca gravada; a connection string da `dev` não é usada. |
+| Reset de QA travado por branch filha | Pré-condição no `qa-reset.sh`: nenhuma filha na `qa`, ou para antes do reset. |
 | SMTP compartilhado com limite e entrega incerta | Poucos usuários. "Reenviar código". SMTP próprio no INBOX se incomodar. |
 | `User.email` da Produção diferente do e-mail real de login | O bootstrap da 002 já conferiu o seed contra o e-mail do usuário. O Obi confere por leitura (sem imprimir o e-mail) antes da promoção. Se divergir, corrige por SQL antes do primeiro login. |
 | APK antigo com chave embutida continua abrindo a API | Rotação de `indice-api-key` na Produção depois do APK novo (passo do usuário, no README). |
-| Dev local depende de branch Neon | Branch `dev` com Allow Localhost. `dev-local-key` segue para testes e curl. |
+| Dev local depende de branch Neon | Branch `dev` (filha da principal) com Allow Localhost. `dev-local-key` segue para testes e curl. |
 
 ## Testes
 
