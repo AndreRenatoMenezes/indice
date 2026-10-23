@@ -19,7 +19,7 @@
 #
 # Uso (da raiz do repositório, com `npm ci` feito: a conferência de conexão usa o
 # @prisma/client do repo):
-#   NEON_API_KEY=... NEON_PROJECT_ID=... infra/cloudrun/qa-db-password.sh
+#   [NEON_API_KEY=...] NEON_PROJECT_ID=... infra/cloudrun/qa-db-password.sh
 # O qa-reset.sh chama este script logo depois do reset da branch.
 #
 # Variáveis opcionais (padrão entre colchetes):
@@ -28,7 +28,8 @@
 #   NEON_ROLE    [neondb_owner]
 set -euo pipefail
 
-: "${NEON_API_KEY:?defina NEON_API_KEY no ambiente}"
+# neonctl autentica por NEON_API_KEY (se definida) ou pelo login (`neonctl auth`).
+neonctl me >/dev/null 2>&1 || { echo "neonctl sem autenticação: defina NEON_API_KEY ou rode neonctl auth" >&2; exit 1; }
 : "${NEON_PROJECT_ID:?defina NEON_PROJECT_ID no ambiente}"
 PROJECT_ID=${PROJECT_ID:-indice-509203}
 REGION=${REGION:-southamerica-east1}

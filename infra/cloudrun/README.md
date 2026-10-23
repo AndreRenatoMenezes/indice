@@ -254,7 +254,7 @@ quiser, desabilite as versões antigas do secret:
 ### Config do Neon Auth
 
 Por branch Neon (`neonctl neon-auth ...`): e-mail e senha, verificação por código
-no cadastro, remetente "Índice". Produção: Allow Localhost **desligado** e o
+no cadastro, SMTP compartilhado do Neon (remetente `auth@mail.myneon.app`, nome "Neon Auth": o provider compartilhado ignora `--sender-name`). Produção: Allow Localhost **desligado** e o
 domínio confiável é a URL de `indice-web`. QA: domínio confiável
 `http://127.0.0.1:3100` e Allow Localhost ligado. O `qa-reset.sh` reaplica a de
 QA depois de cada reset.
@@ -299,7 +299,7 @@ gcloud run services proxy indice-web-qa --region southamerica-east1 --port 3100
 Não abre no celular. A API de QA continua pública (o APK precisa dela) e exige
 login (ou a chave de QA, para automações); a chave de Produção não abre QA, e
 vice-versa. Um login de Produção também não vale em QA: a API confere o emissor
-do JWT, e o `neon_auth` copiado no reset traz as mesmas chaves.
+do JWT, e as chaves de assinatura de QA e de Produção são diferentes.
 
 ## Recopiar a Produção para QA: `qa-reset.sh`
 
@@ -308,9 +308,23 @@ export NEON_API_KEY=...  NEON_PROJECT_ID=...
 infra/cloudrun/qa-reset.sh
 ```
 
-Reseta a branch Neon `qa` a partir da principal (dados de hoje da Produção),
-reaplica a config do Neon Auth de QA (domínio confiável, Allow Localhost) e confere
-que a Auth URL da `qa` é a da API de QA (`falhou` e para se divergir), roda `qa-db-password.sh` (abaixo), `indice-migrate-qa` (reaplica as migrações de `development` que ainda não
+Antes de tudo confere que a `qa` **não tem branch filha** (o Neon recusa o reset
+com filha; se houver, o script imprime `falhou: qa tem filha <nome>` e para). A
+branch Neon `dev`, usada só para o login no desenvolvimento local, é filha da
+**principal**, nunca da `qa`: crie-a com
+`neonctl branches create --name dev --parent <branch-principal> --no-secrets` e,
+logo depois, troque a senha do `neondb_owner` dela (a filha herda a da Produção)
+sem gravar o valor, pela API do Neon (`reset_password`). Nunca puxe a connection
+string da `dev`: o app local usa o Postgres do compose, e a `dev` serve só ao
+Auth (o `.env` recebe só o `NEON_AUTH_BASE_URL`).
+
+Depois reseta a branch Neon `qa` a partir da principal (dados de hoje da Produção),
+roda `qa-db-password.sh` (abaixo), reaplica a config do Neon Auth de QA (e-mail e
+senha, Allow Localhost, domínio confiável) e confere que a Auth
+URL da `qa` é a da API de QA (`falhou` e para se divergir). O reset preserva a Auth
+URL e a config, mas traz de volta os usuários e as sessões da principal: **as
+sessões de QA caem no reset** e é preciso entrar de novo. Em seguida roda
+`indice-migrate-qa` (reaplica as migrações de `development` que ainda não
 estão em Produção), `indice-seed-qa` e `indice-rekey-qa`. O rekey apaga em QA
 toda `ApiKey` que não seja a de QA — a cópia traz o registro da chave de
 Produção.
