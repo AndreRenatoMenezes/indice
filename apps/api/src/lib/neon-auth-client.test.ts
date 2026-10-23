@@ -51,10 +51,19 @@ describe("sessionTokenFromSetCookie", () => {
     expect(sessionTokenFromSetCookie(headers)).toBe("token-123");
   });
 
-  it("aceita variação sem o prefixo __Secure-", () => {
+  it("aceita a variação local sem o prefixo __Secure-", () => {
     const headers = new Headers();
-    headers.append("set-cookie", "neonauth.session_token=token-456; Path=/");
+    headers.append("set-cookie", "neon-auth.session_token=token-456; Path=/");
     expect(sessionTokenFromSetCookie(headers)).toBe("token-456");
+  });
+
+  it("devolve o valor URL-encoded inteiro (token.assinatura)", () => {
+    const headers = new Headers();
+    headers.append(
+      "set-cookie",
+      `${NEON_AUTH_PROTOCOL.sessionCookie}=abc%2Bdef.ghi%3D%3D; Path=/; HttpOnly; Secure`,
+    );
+    expect(sessionTokenFromSetCookie(headers)).toBe("abc%2Bdef.ghi%3D%3D");
   });
 
   it("devolve null quando não há cookie de sessão", () => {
@@ -66,6 +75,24 @@ describe("sessionTokenFromSetCookie", () => {
 });
 
 describe("createNeonAuthClient", () => {
+  it("usa os endpoints e o cookie confirmados pelo spike", () => {
+    expect(NEON_AUTH_PROTOCOL).toMatchObject({
+      sessionCookie: "__Secure-neon-auth.session_token",
+      signUp: "/sign-up/email",
+      verifyEmail: "/email-otp/verify-email",
+      resendVerification: "/email-otp/send-verification-otp",
+      signIn: "/sign-in/email",
+      token: "/token",
+      jwksPath: "/.well-known/jwks.json",
+      signOut: "/sign-out",
+      requestPasswordReset: "/request-password-reset",
+      resetPassword: "/reset-password",
+      otpLength: 6,
+      resetTokenParam: "token",
+    });
+    expect(JSON.stringify(NEON_AUTH_PROTOCOL)).not.toContain("forget-password");
+  });
+
   it("sign-in manda Origin, corpo JSON e devolve o token do cookie", async () => {
     const { client, calls } = clientWith(
       cookieResponse([`${NEON_AUTH_PROTOCOL.sessionCookie}=rt-abc; Path=/; HttpOnly`]),
@@ -83,9 +110,13 @@ describe("createNeonAuthClient", () => {
     expect(calls[0]!.init.signal).toBeInstanceOf(AbortSignal);
   });
 
-  it("sign-in aceita o token no corpo quando não há cookie", async () => {
+  it("sign-in sem Set-Cookie falha mesmo com token no corpo", async () => {
+    // O `token` do corpo sozinho não serve como refresh em `/token`.
     const { client } = clientWith(jsonResponse({ token: "rt-body" }));
-    await expect(client.signIn({ email: "a@b.com", password: "x" })).resolves.toEqual({ sessionToken: "rt-body" });
+    await expect(client.signIn({ email: "a@b.com", password: "x" })).rejects.toMatchObject({
+      name: "NeonAuthError",
+      code: "missing session token",
+    });
   });
 
   it("sign-in sem token devolve erro de protocolo", async () => {
@@ -96,19 +127,23 @@ describe("createNeonAuthClient", () => {
     });
   });
 
-  it("fetchToken manda o cookie de sessão e lê `set-auth-jwt`", async () => {
-    const headers = new Headers({ "set-auth-jwt": "jwt-header" });
-    const { client, calls } = clientWith(new Response(null, { status: 200, headers }));
+  it("fetchToken manda o cookie inteiro e lê o corpo `{ token }`", async () => {
+    const { client, calls } = clientWith(jsonResponse({ token: "jwt-body" }));
 
-    await expect(client.fetchToken("rt-abc")).resolves.toBe("jwt-header");
+    await expect(client.fetchToken("abc%2Bdef.ghi%3D%3D")).resolves.toBe("jwt-body");
     expect(calls[0]!.url).toBe("https://auth.example.com/neondb/auth/token");
     expect(calls[0]!.init.method).toBe("GET");
-    expect(headersOf(calls[0]!.init).Cookie).toBe(`${NEON_AUTH_PROTOCOL.sessionCookie}=rt-abc`);
+    expect(headersOf(calls[0]!.init).Cookie).toBe(
+      `${NEON_AUTH_PROTOCOL.sessionCookie}=abc%2Bdef.ghi%3D%3D`,
+    );
   });
 
-  it("fetchToken cai no corpo `{ token }`", async () => {
-    const { client } = clientWith(jsonResponse({ token: "jwt-body" }));
-    await expect(client.fetchToken("rt-abc")).resolves.toBe("jwt-body");
+  it("fetchToken exige o corpo `{ token }`", async () => {
+    const { client } = clientWith(jsonResponse({ jwt: "jwt-fora-do-contrato" }));
+    await expect(client.fetchToken("rt-abc")).rejects.toMatchObject({
+      name: "NeonAuthError",
+      code: "missing access token",
+    });
   });
 
   it("traduz erro HTTP do provedor com status e código", async () => {
@@ -147,6 +182,9 @@ describe("createNeonAuthClient", () => {
     expect(bodies[4]).toEqual({ email: "a@b.com", redirectTo: "https://indice.example.com/redefinir-senha" });
     expect(bodies[5]).toEqual({ token: "tk", newPassword: "novasenha1" });
     expect(headersOf(calls[3]!.init).Cookie).toBe(`${NEON_AUTH_PROTOCOL.sessionCookie}=rt`);
+    expect(calls[4]!.url).toBe("https://auth.example.com/neondb/auth/request-password-reset");
+    expect(headersOf(calls[4]!.init).Origin).toBe("https://indice.example.com");
+    expect(calls[5]!.url).toBe("https://auth.example.com/neondb/auth/reset-password");
   });
 
   it("forgot-password sem origem confiável não manda redirectTo", async () => {

@@ -4,7 +4,6 @@ import rateLimit from "@fastify/rate-limit";
 import sensible from "@fastify/sensible";
 import { prisma } from "@indice/db";
 import { config, missingAuthEnv } from "./config.js";
-import { NEON_AUTH_PROTOCOL_CONFIRMED } from "./lib/neon-auth-client.js";
 import { createAuthContext, type AuthContext } from "./modules/auth/context.js";
 import { authPlugin } from "./plugins/auth.js";
 import { authRoutes } from "./routes/auth.js";
@@ -44,9 +43,6 @@ export async function buildApp(options: AppOptions = {}) {
   });
 
   const auth = options.auth ?? createAuthContext();
-  if (auth.neonAuth && !NEON_AUTH_PROTOCOL_CONFIRMED) {
-    app.log.warn("Neon Auth habilitado com protocolo provisório: aguardando o spike da WP01");
-  }
 
   await app.register(cors, { origin: config.corsOrigin === "*" ? true : config.corsOrigin.split(","), credentials: true });
   await app.register(sensible);

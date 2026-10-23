@@ -63,12 +63,15 @@ function signInFailure(app: FastifyInstance, reply: FastifyReply, error: unknown
   const provider = neonError(error);
   if (provider) {
     const code = provider.code.toUpperCase();
-    // O contrato emendado da 003 usa este 403 para o cliente reenviar o código
-    // e abrir a tela de verificação de e-mail.
-    if (provider.status === 403 || code.includes("NOT_VERIFIED") || code.includes("VERIFY_EMAIL")) {
+    // O provedor devolve o motivo no `code`; o status sozinho não separa
+    // "e-mail não verificado" de outras recusas 403.
+    if (code === "EMAIL_NOT_VERIFIED") {
       return reply.code(403).send({ error: "email not verified" });
     }
-    if (provider.status === 400 || provider.status === 401 || provider.status === 422) {
+    if (provider.status === 401 || code === "INVALID_EMAIL_OR_PASSWORD") {
+      return reply.code(401).send({ error: "invalid credentials" });
+    }
+    if (provider.status === 400 || provider.status === 422) {
       return reply.code(401).send({ error: "invalid credentials" });
     }
   }

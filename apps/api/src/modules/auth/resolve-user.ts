@@ -5,8 +5,8 @@ import type { StoreUser, UserStore } from "./user-store.js";
 
 export type ResolveResult = { user: StoreUser } | { error: IdentityDenial };
 
-// O JWT do Neon Auth não tem claim de nome. O nome exibido nasce do e-mail;
-// o usuário antigo mantém o `displayName` que já tinha.
+// O JWT do Neon Auth traz `name`, mas o Índice mantém o nome exibido derivado
+// do e-mail; o usuário antigo conserva o `displayName` que já tinha.
 export function displayNameFromEmail(email: string): string {
   const local = email.split("@")[0]?.trim() ?? "";
   return local ? local.slice(0, 80) : "Você";

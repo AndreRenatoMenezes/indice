@@ -47,6 +47,19 @@ describe("createJwtVerifier", () => {
     expect(claims.exp).toBeGreaterThan(Math.floor(Date.now() / 1000));
   });
 
+  it("aceita as claims `name` e `role` do Neon sem alterar o contrato", async () => {
+    const claims = await verifier(
+      await token({ email: "andre@example.com", emailVerified: true, name: "Andre", role: "user" }),
+    );
+
+    expect(claims).toEqual({
+      sub: "auth-user-1",
+      email: "andre@example.com",
+      emailVerified: true,
+      exp: expect.any(Number),
+    });
+  });
+
   it("trata `emailVerified` ausente como não verificado", async () => {
     const claims = await verifier(await token({ email: "andre@example.com" }));
     expect(claims.emailVerified).toBe(false);

@@ -176,10 +176,10 @@ describe("POST /auth/verify-email e /auth/resend-verification", () => {
     expect(client.verifyEmail).toHaveBeenCalledWith({ email: ALLOWED, otp: "123456" });
   });
 
-  it("400 `invalid code` quando o provedor recusa o código", async () => {
+  it("400 `invalid code` quando o OTP está vencido (OTP_EXPIRED)", async () => {
     const client = fakeClient({
       verifyEmail: vi.fn(async () => {
-        throw new NeonAuthError(400, "INVALID_OTP");
+        throw new NeonAuthError(400, "OTP_EXPIRED");
       }),
     });
     const app = await makeApp({ neonAuth: client });
@@ -325,6 +325,24 @@ describe("POST /auth/sign-in", () => {
 
     expect(res.statusCode).toBe(403);
     expect(res.json()).toEqual({ error: "email not verified" });
+  });
+
+  it("403 do provedor com outro code não vira `email not verified`", async () => {
+    const client = fakeClient({
+      signIn: vi.fn(async () => {
+        throw new NeonAuthError(403, "BANNED");
+      }),
+    });
+    const app = await makeApp({ neonAuth: client });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/auth/sign-in",
+      payload: { email: ALLOWED, password: "senha1234" },
+    });
+
+    expect(res.statusCode).toBe(502);
+    expect(res.json()).toEqual({ error: "auth unavailable" });
   });
 
   it("502 quando o provedor cai", async () => {

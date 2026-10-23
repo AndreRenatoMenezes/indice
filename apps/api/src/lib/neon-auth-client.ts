@@ -1,29 +1,30 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// PENDENTE WP01 (spike-neon-auth.md) — único lugar do código que conhece o
-// protocolo servidor a servidor do Neon Auth (Managed Better Auth 1.7.6).
-//
-// [plano]  valores que o plan.md da 003 já fixou a partir da doc do Neon.
-// [provisório] valores que o Better Auth 1.7.6 sugere e o spike do Obi tem de
-//          confirmar: nomes de endpoint, corpo do `/token`, tamanho do código e
-//          parâmetro do link de reset. Se o spike divergir, muda só aqui.
-// Enquanto `NEON_AUTH_PROTOCOL_CONFIRMED` for `false`, a API avisa no log ao
-// subir com auth configurado; a troca para `true` é o fecho desta pendência.
+// Único lugar do código que conhece o protocolo servidor a servidor do Neon
+// Auth (Managed Better Auth 1.7.6). Confirmado pelo spike final da WP01
+// (`.claude/specs/current/003-login-multiusuario/spike-neon-auth.md`):
+// - cookie `__Secure-neon-auth.session_token` (com hífen);
+// - o refresh é o valor INTEIRO do cookie (`token.assinatura`, URL-encoded),
+//   não o token do corpo do sign-in; a API não decodifica nem reconstrói;
+// - `GET /token` com `Cookie` devolve 200 `{ "token": "<jwt>" }`;
+// - JWT EdDSA de 900 s, `iss`/`aud` = origem da Auth URL (sem `/neondb/auth`);
+// - OTP de 6 dígitos; reset por `POST /request-password-reset` com link
+//   `?token=`.
 // ─────────────────────────────────────────────────────────────────────────────
-export const NEON_AUTH_PROTOCOL_CONFIRMED = false;
+export const NEON_AUTH_PROTOCOL_CONFIRMED = true;
 
 export const NEON_AUTH_PROTOCOL = {
-  jwksPath: "/.well-known/jwks.json", // [plano] plan.md, "Estado verificado"
-  token: "/token", // [plano] GET /token com o cookie de sessão
-  sessionCookie: "__Secure-neonauth.session_token", // [plano] cookie de sessão opaco
-  signUp: "/sign-up/email", // [provisório]
-  verifyEmail: "/email-otp/verify-email", // [provisório]
-  resendVerification: "/email-otp/send-verification-otp", // [provisório]
-  signIn: "/sign-in/email", // [provisório]
-  signOut: "/sign-out", // [provisório]
-  forgotPassword: "/forget-password", // [provisório]
-  resetPassword: "/reset-password", // [provisório]
-  otpLength: 6, // [provisório] `VerifyEmailInput` em packages/shared usa \d{6}
-  resetTokenParam: "token", // [provisório] link de reset → /redefinir-senha?token=
+  jwksPath: "/.well-known/jwks.json",
+  token: "/token", // GET com Cookie → 200 { token }
+  sessionCookie: "__Secure-neon-auth.session_token",
+  signUp: "/sign-up/email",
+  verifyEmail: "/email-otp/verify-email",
+  resendVerification: "/email-otp/send-verification-otp",
+  signIn: "/sign-in/email",
+  signOut: "/sign-out",
+  requestPasswordReset: "/request-password-reset",
+  resetPassword: "/reset-password",
+  otpLength: 6, // `VerifyEmailInput` em packages/shared usa \d{6}
+  resetTokenParam: "token", // link de reset → /redefinir-senha?token=
 } as const;
 
 export class NeonAuthError extends Error {
@@ -68,6 +69,8 @@ export function createNeonAuthClient(options: {
   ): Promise<Response> {
     const headers: Record<string, string> = { Origin: origin, Accept: "application/json" };
     if (init.body !== undefined) headers["Content-Type"] = "application/json";
+    // O refresh já vem URL-encoded do `Set-Cookie`; não decodificar nem
+    // recodificar, senão o `/token` responde 401.
     if (init.sessionToken) headers.Cookie = `${NEON_AUTH_PROTOCOL.sessionCookie}=${init.sessionToken}`;
 
     let response: Response;
@@ -99,33 +102,23 @@ export function createNeonAuthClient(options: {
     async resendVerification(email) {
       await request(NEON_AUTH_PROTOCOL.resendVerification, {
         method: "POST",
-        body: { email, type: "email-verification" }, // [provisório] `type` do plugin de OTP
+        body: { email, type: "email-verification" },
       });
     },
 
     async signIn(input) {
       const response = await request(NEON_AUTH_PROTOCOL.signIn, { method: "POST", body: input });
       const cookie = sessionTokenFromSetCookie(response.headers);
-      if (cookie) return { sessionToken: cookie };
-
-      // [provisório] em alguns modos o Better Auth devolve o token no corpo.
-      const body = await readJson(response);
-      const token = typeof body.token === "string" ? body.token : null;
-      if (token) return { sessionToken: token };
-      throw new NeonAuthError(0, "missing session token");
+      // O refresh tem de ser o valor inteiro do cookie (`token.assinatura`);
+      // o `token` do corpo do sign-in sozinho responde 401 em `/token`.
+      if (!cookie) throw new NeonAuthError(0, "missing session token");
+      return { sessionToken: cookie };
     },
 
     async fetchToken(sessionToken) {
       const response = await request(NEON_AUTH_PROTOCOL.token, { method: "GET", sessionToken });
-
-      // [provisório] o plano cita o header `set-auth-jwt` no `get-session`;
-      // aceitamos também no `/token`, além do corpo `{ token }`.
-      const header = response.headers.get("set-auth-jwt");
-      if (header) return header;
-
       const body = await readJson(response);
-      const token =
-        typeof body.token === "string" ? body.token : typeof body.jwt === "string" ? body.jwt : null;
+      const token = typeof body.token === "string" ? body.token : null;
       if (!token) throw new NeonAuthError(0, "missing access token");
       return token;
     },
@@ -135,7 +128,7 @@ export function createNeonAuthClient(options: {
     },
 
     async forgotPassword(input) {
-      await request(NEON_AUTH_PROTOCOL.forgotPassword, {
+      await request(NEON_AUTH_PROTOCOL.requestPasswordReset, {
         method: "POST",
         body: input.redirectTo ? { email: input.email, redirectTo: input.redirectTo } : { email: input.email },
       });
@@ -171,21 +164,22 @@ async function errorFrom(response: Response): Promise<NeonAuthError> {
 }
 
 /**
- * Lê o token de sessão do `Set-Cookie` do sign-in. O nome exato vem do spike
- * (WP01); o fallback por sufixo cobre o cookie sem o prefixo `__Secure-` em
- * ambiente local.
+ * Lê o token de sessão do `Set-Cookie` do sign-in. O valor é devolvido como
+ * veio (URL-encoded): ele é o refresh inteiro que volta no `Cookie` do `/token`.
+ * Aceita também o nome sem o prefixo `__Secure-`, usado em ambiente local.
  */
 export function sessionTokenFromSetCookie(
   headers: Headers,
   cookieName: string = NEON_AUTH_PROTOCOL.sessionCookie,
 ): string | null {
+  const localName = cookieName.replace(/^__Secure-/, "");
   const cookies = setCookies(headers);
   for (const cookie of cookies) {
     const pair = cookie.split(";")[0] ?? "";
     const separator = pair.indexOf("=");
     if (separator <= 0) continue;
     const name = pair.slice(0, separator).trim();
-    if (name !== cookieName && !name.endsWith("session_token")) continue;
+    if (name !== cookieName && name !== localName) continue;
     const value = pair.slice(separator + 1).trim();
     if (value) return value;
   }
