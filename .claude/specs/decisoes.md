@@ -243,3 +243,15 @@ Entrada: data · autor · decisão · racional · alternativas rejeitadas · cus
 - **Alternativas rejeitadas:** (b) `--preserve-under-name` com nome por data (acumula branches, porque a preservada fica com a `dev` como filha); (c) `dev` como branch raiz independente (sem o Auth herdado e com a config feita do zero, sem ganho sobre (a)).
 - **Custo de reverter:** baixo (recriar a `dev`).
 - **Escopo afetado:** 003, WP06 (`qa-reset.sh`, README) e branch `dev` do Neon.
+
+## 2026-10-23 · Luke (Maestro)
+
+- **Decisão:** usuário autorizou (a) push de `feat/003-login-multiusuario` e PR para `development` (merge segue sendo dele); (b) aceitar o remetente "Neon Auth" do SMTP compartilhado na 003 (o shared ignora `--sender-name`), com SMTP próprio indo ao INBOX; (c) apagar a `dev` antiga e a `qa-pre-reset-20261023` e recriar a `dev` filha da principal; (d) rodar `qa-db-password.sh` na qa; (e) reset da qa para o teste de Auth URL (feito). Obi executou (c), (d) e (e) com evidência; Allow Localhost de production agora `false`.
+- **Racional:** pedido explícito do usuário; sem escopo novo.
+- **Custo de reverter:** baixo para (b); (c) apagou só dados de teste.
+- **Escopo afetado:** WP01, WP06, WP07.
+
+## 2026-10-23 · Luke (Maestro), registrado pela Leia
+
+- **Decisão (do usuário):** na 003, o remetente "Neon Auth" do SMTP compartilhado foi aceito, porque o shared ignora `sender-name`. Ninguém roda `email-provider update --sender-name`. O SMTP próprio com remetente "Índice" foi para o INBOX como melhoria.
+- **Escopo afetado:** 003 (`plan.md`: SMTP, Config do Neon Auth, passo 4 do `qa-reset.sh`), INBOX.
