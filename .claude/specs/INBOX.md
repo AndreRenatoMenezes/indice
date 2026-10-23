@@ -11,7 +11,7 @@ virar feature, o Spec Architect abre uma spec.
 - "Esta e as próximas" numa ocorrência futura também apaga as ocorrências abertas entre hoje e ela (é "parar" da spec 001); talvez parar só a partir da data escolhida (`DELETE /recurrence-rules/:id?from=`).
 
 - Excluir a própria conta pelo app (LGPD) e trocar e-mail: ficaram fora da 003.
-- SMTP próprio no Neon Auth, se o compartilhado (`auth@mail.myneon.app`) atrasar ou bater limite (003).
+- SMTP próprio no Neon Auth: os e-mails de código e de reset saem com remetente "Índice" (o compartilhado `auth@mail.myneon.app` ignora `sender-name` e mostra "Neon Auth"), com mais entrega e limite. Aceito como está na 003, por decisão do usuário (2026-10-23).
 - Categorias, hábitos e metas iniciais para usuário novo (na 003 ele nasce vazio).
 
 ## Bugs

@@ -58,7 +58,7 @@ O que a fachada **não** protege: o endpoint público do Neon Auth aceita cadast
 | Reset de senha | `POST /auth/forgot-password` sempre responde 204, para não revelar a existência do e-mail. O Neon Auth envia o link para `${AUTH_WEB_ORIGIN}/redefinir-senha`. O Android dispara o pedido, e o link abre a web. |
 | Cadastro com e-mail fora da lista | `POST /auth/sign-up` responde 403 `{ error: "not allowed" }` antes de falar com o Neon. Isso revela se o e-mail está na lista, o que é aceito para um app pessoal: o próprio cadastro do Neon já revela se a conta existe. |
 | QA | O Auth é habilitado na branch principal (Produção) **antes** do reset de QA. O `qa-reset.sh` copia `neon_auth`. Depois do reset, o script reaplica a config de QA (domínio confiável `AUTH_WEB_ORIGIN` de QA e Allow Localhost) e confere que a Auth URL de QA não mudou. Os usuários e hashes da Produção ficam em QA, coerente com a decisão 6 da 002 (QA é cópia real). Em QA, `AUTH_WEB_ORIGIN` = `http://127.0.0.1:3100`, a origem do proxy, porque a web de QA só abre por ele. |
-| SMTP | O compartilhado do Neon (`auth@mail.myneon.app`), com o nome da aplicação "Índice". O SMTP próprio fica fora de escopo, e o risco está aceito (limite de envio). |
+| SMTP | O compartilhado do Neon (`auth@mail.myneon.app`), remetente "Neon Auth" (o shared ignora `sender-name`; aceito pelo usuário em 2026-10-23). O SMTP próprio, com remetente "Índice", fica fora de escopo e está no INBOX. Risco aceito: limite de envio. |
 
 ## Contratos
 
@@ -148,7 +148,7 @@ model User {
 | `AUTH_WEB_ORIGIN` (env da API) | URL de `indice-web` | `http://127.0.0.1:3100` |
 | `INDICE_ALLOWED_EMAILS` (secret) | `indice-allowed-emails` | `indice-qa-allowed-emails` |
 | Domínio confiável no Neon Auth | URL de `indice-web` | `http://127.0.0.1:3100` (Allow Localhost ligado só em QA) |
-| Config do Neon Auth | Sign-up com e-mail, verificação no cadastro por código, nome "Índice", Allow Localhost **desligado** | igual, com Allow Localhost ligado |
+| Config do Neon Auth | Sign-up com e-mail, verificação no cadastro por código, provedor de e-mail compartilhado, Allow Localhost **desligado** | igual, com Allow Localhost ligado |
 | Web | perde `INDICE_API_KEY_WEB` | perde `INDICE_API_KEY_WEB` |
 
 - O `cloudbuild.yaml` ganha substituições `_AUTH_BASE_URL`, `_AUTH_WEB_ORIGIN` e `_ALLOWED_EMAILS_SECRET` (com padrões de Produção) e passa `NEON_AUTH_BASE_URL`, `AUTH_WEB_ORIGIN` e o secret para a API. O `deploy.yml` passa os valores de QA. `_API_KEY_SECRET` deixa de ir para a web.
@@ -157,7 +157,7 @@ model User {
   1. Pré-condição: a `qa` não tem branch filha. Se tiver, imprime `falhou: qa tem filha <nome>` e para antes do reset. Não usa `--preserve-under-name`.
   2. `branches reset qa --parent`, como hoje.
   3. `qa-db-password.sh` (já é chamado hoje): o reset devolve a senha da principal.
-  4. Reaplica a config de auth da `qa` com as flags do spike: `config email-password update`, `domain allow-localhost enable`, `domain add http://127.0.0.1:3100` se não estiver no `domain list`, e `email-provider update --type shared --sender-name "Índice"`.
+  4. Reaplica a config de auth da `qa` com as flags do spike: `config email-password update`, `domain allow-localhost enable`, `domain add http://127.0.0.1:3100` se não estiver no `domain list`. O provedor de e-mail fica como está (shared, remetente "Neon Auth").
   5. Confere que o `Base URL` de `neon-auth status` na `qa` é igual ao `NEON_AUTH_BASE_URL` de `indice-api-qa`. Se divergir, `falhou` e para.
   6. Migrate, seed e rekey, como hoje.
 
